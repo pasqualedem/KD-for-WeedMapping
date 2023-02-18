@@ -1,6 +1,6 @@
 experiment:
   name: WDRE
-  group: KD/AdaptiveLoss/Sigmoid
+  group: PSA
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -18,7 +18,7 @@ parameters:
 
   train_params:
     max_epochs: [500]
-    initial_lr: [0.0001]
+    initial_lr: [0.0001, 0.0005]
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
@@ -26,18 +26,18 @@ parameters:
       name: [focal]
       params:
         weight: [[0.0273, 1.0, 4.3802]]
+        gamma: [2.0]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [False]
-    metric_to_watch: [loss]
-    freeze_pretrained: [True]
-    inform_loss_in_validaiton: [True]
+    metric_to_watch: [FocalLoss]
+    freeze_pretrained: [False]
 
   early_stopping:
-    patience: [25]
-    monitor: [loss]
+    patience: [10]
+    monitor: [FocalLoss]
     mode: [min]
 
   train_metrics:
@@ -65,33 +65,11 @@ parameters:
       num_classes: [3]
       mdmc_average: [global]
 
-  kd:
-    module:
-      name: [logits_distillation]
-      params:
-
-    teacher:
-      name: [wd/network/ocrnet/HRNet]
-      params:
-        pretrained: [mythopoeic-godwit-66]
-        side_pretrained: ['G']
-        aux_output: [False]
-
-    loss:
-      name: [wd/loss/loss/SelfAdaptiveDistillationLoss]
-      params:
-        distillation_loss:
-          name: [vis_kldiv_loss]
-        warm_up: [500, 2000]
-        smooth_steps: [100]
-        use_sigmoid: [True]
-        shrink: [0.025]
-        shift: [0.2]
-
   model:
-    name: [lawin]
+    name: [wd/network/ocrnet/HRNet]
     params:
-      backbone: [MiT-L0]
+      pretrained: [True]
+      side_pretrained: ['G']
 
   dataset:
     root: ["dataset/0_rotations_processed_003_test/RedEdge"]
@@ -100,7 +78,7 @@ parameters:
     hor_flip: [True]
     ver_flip: [True]
     channels: [['R', 'G', 'B', 'NIR', 'RE']]
-    batch_size: [6]
+    batch_size: [4, 6, 8]
     val_batch_size: [12]
     test_batch_size: [12]
     num_workers: [0]
@@ -116,10 +94,3 @@ parameters:
 
 
 other_grids:
-  - kd:
-      loss:
-        params:
-          smooth_steps: [100, 1]
-          momentum: [0.9]
-          min_grad: [1e-4]
-

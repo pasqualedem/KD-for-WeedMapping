@@ -1,6 +1,6 @@
 experiment:
-  name: WDRE
-  group: KD/AdaptiveLoss/Sigmoid
+  name: WeedMapKDRedEdge
+  group: Feature
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -26,17 +26,17 @@ parameters:
       name: [focal]
       params:
         weight: [[0.0273, 1.0, 4.3802]]
+        gamma: [2.0]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [False]
     metric_to_watch: [loss]
-    freeze_pretrained: [True]
-    inform_loss_in_validaiton: [True]
+    freeze_pretrained: [False]
 
   early_stopping:
-    patience: [25]
+    patience: [10]
     monitor: [loss]
     mode: [min]
 
@@ -67,31 +67,32 @@ parameters:
 
   kd:
     module:
-      name: [logits_distillation]
+      name: [variational_information_distillation]
       params:
 
     teacher:
-      name: [wd/network/ocrnet/HRNet]
+      name: [splitlawin]
       params:
-        pretrained: [mythopoeic-godwit-66]
+        backbone: [MiT-B1]
+        backbone_pretrained: [True]
+        main_channels: [3]
         side_pretrained: ['G']
-        aux_output: [False]
+        fusion_type: ['conv_sum']
+
+      checkpoint_path: ["checkpoints/SplitLawin.pth"]
 
     loss:
-      name: [wd/loss/loss/SelfAdaptiveDistillationLoss]
+      name: [variational_information_logits_loss]
       params:
         distillation_loss:
           name: [vis_kldiv_loss]
-        warm_up: [500, 2000]
-        smooth_steps: [100]
-        use_sigmoid: [True]
-        shrink: [0.025]
-        shift: [0.2]
+        variant: [scaled, mean]
+
 
   model:
     name: [lawin]
     params:
-      backbone: [MiT-L0]
+      backbone: [MiT-LD, MiT-L0, MiT-L1]
 
   dataset:
     root: ["dataset/0_rotations_processed_003_test/RedEdge"]
@@ -117,9 +118,13 @@ parameters:
 
 other_grids:
   - kd:
+      module:
+        name: [feature_distillation_conv_adapter]
       loss:
+        name: [kd_feature_logits_loss]
         params:
-          smooth_steps: [100, 1]
-          momentum: [0.9]
-          min_grad: [1e-4]
-
+          distillation_loss:
+            name: [vis_kldiv_loss]
+          feature_loss:
+            name: [MSELoss]
+          variant: 

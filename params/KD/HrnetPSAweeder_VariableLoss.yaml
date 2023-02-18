@@ -1,6 +1,6 @@
 experiment:
   name: WDRE
-  group: KD/AdaptiveLoss/Sigmoid
+  group: test/PSA/HrnetPSAweeder/VariableLoss
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -18,26 +18,46 @@ parameters:
 
   train_params:
     max_epochs: [500]
-    initial_lr: [0.0001]
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
     loss:
-      name: [focal]
+      name: [wd/loss/loss/RMILoss]
       params:
+        num_classes: [3]
         weight: [[0.0273, 1.0, 4.3802]]
+    initial_lr: [0.01]
+    scheduler:
+      name: [ExpLR]
+      params:
+        gamma: [0.9]
+
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [False]
-    metric_to_watch: [loss]
-    freeze_pretrained: [True]
-    inform_loss_in_validaiton: [True]
+    metric_to_watch: [RMILoss]
+    freeze_pretrained: [False]
 
+  aux_loss:
+    name: [wd/loss/branch/BranchVariableLoss]
+    params:
+      min_threshold: [0.2]
+      max_threshold: [1]
+      aux_loss_weights: [[0.6, 0.2, 0.2]]
+      aux_loss: 
+        name: [cross_entropy]
+        params:
+          weight: [[0.0273, 1.0, 4.3802]]
+      branch_loss: 
+        name: [cross_entropy]
+        params:
+          weight: [[0.0273, 1.0, 4.3802]]
+        
   early_stopping:
     patience: [25]
-    monitor: [loss]
+    monitor: [RMILoss]
     mode: [min]
 
   train_metrics:
@@ -65,33 +85,16 @@ parameters:
       num_classes: [3]
       mdmc_average: [global]
 
-  kd:
-    module:
-      name: [logits_distillation]
-      params:
-
-    teacher:
-      name: [wd/network/ocrnet/HRNet]
-      params:
-        pretrained: [mythopoeic-godwit-66]
-        side_pretrained: ['G']
-        aux_output: [False]
-
-    loss:
-      name: [wd/loss/loss/SelfAdaptiveDistillationLoss]
-      params:
-        distillation_loss:
-          name: [vis_kldiv_loss]
-        warm_up: [500, 2000]
-        smooth_steps: [100]
-        use_sigmoid: [True]
-        shrink: [0.025]
-        shift: [0.2]
-
   model:
-    name: [lawin]
+    name: [wd/network/ocrnet/HRNetWeeder]
     params:
-      backbone: [MiT-L0]
+      pretrained: [True]
+      side_pretrained: ['G']
+      aux_output: [True]
+      patch_dim: [2]
+      num_heads: [4]
+      embed_div: [1]
+      emb_patch_div: [1]
 
   dataset:
     root: ["dataset/0_rotations_processed_003_test/RedEdge"]
@@ -116,10 +119,3 @@ parameters:
 
 
 other_grids:
-  - kd:
-      loss:
-        params:
-          smooth_steps: [100, 1]
-          momentum: [0.9]
-          min_grad: [1e-4]
-
