@@ -39,7 +39,6 @@ from wd.network.utils import get_trunk
 from wd.network.utils import BNReLU, get_aspp
 from wd.network.utils import make_attn_head
 from wd.network.ocr_utils import SpatialGather_Module, SpatialOCR_Module
-from wd.network.weeder import WeedLayer
 from wd.network.config import cfg
 from wd.utils import fmt_scale, load_checkpoint_module_fix, load_weight_from_clearml
 
@@ -401,6 +400,7 @@ def HRNet(arch_params):
 class HRNetWeeder(nn.Module):
     def __init__(self, arch_params) -> None:
         super().__init__()
+        from wd.network.weeder import WeedLayer # So cc_torch is not necessary
         arch_params['ocr_output'] = True
         self.pretrained = arch_params.get('pretrained') or False
         self.aux_output = arch_params.get('aux_output') if arch_params.get('aux_output') is not None else True
