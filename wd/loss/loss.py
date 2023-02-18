@@ -14,6 +14,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from einops import rearrange
+
 from ezdl.utils.utilities import substitute_values, instantiate_class
 from ezdl.loss import ComposedLoss
 from wd.loss import rmi_utils
@@ -247,7 +249,7 @@ def shrinked_shifted_sigmoid(x, shrink=40, shift=0.2):
 
 class AbstractAdaptiveDistillationLoss(ComposedLoss):
     name = 'AAD'
-    def __init__(self, warm_up=500, smooth_steps=100, momentum=0.0, min_grad=0.0, use_sigmoid=False, shrink=40, shift=40, **kwargs):
+    def __init__(self, warm_up=500, smooth_steps=100, momentum=0.0, min_grad=0.0, use_sigmoid=False, shrink=40, shift=40, sigmoid_momentum=0.0, **kwargs):
         super().__init__()
         self.warm_up = warm_up
         self.smooth_steps = smooth_steps
@@ -256,12 +258,14 @@ class AbstractAdaptiveDistillationLoss(ComposedLoss):
         self.use_sigmoid = use_sigmoid
         self.shrink = shrink
         self.shift = shift
+        self.sigmoid_momentum = sigmoid_momentum
 
         assert warm_up > smooth_steps, "warm_up should be larger than smooth_steps"
 
         self.is_warmup = True
         self.first_grad = None
         self.last_loss = None
+        self.last_sigmoid = 1.0
         self.history_grad = []
 
     def _calc_reduction_factor(self, dist_loss, validation=False):
@@ -298,8 +302,8 @@ class AbstractAdaptiveDistillationLoss(ComposedLoss):
 
 class SelfAdaptiveDistillationLoss(AbstractAdaptiveDistillationLoss):
     name = 'SAD'
-    def __init__(self, task_loss_fn, distillation_loss_fn, warm_up=500, smooth_steps=100, momentum=0.0, min_grad=0.0, use_sigmoid=False, shrink=40, shift=0.2, **kwargs):
-        super().__init__(warm_up, smooth_steps, momentum, min_grad, use_sigmoid, shrink, shift)
+    def __init__(self, task_loss_fn, distillation_loss_fn, warm_up=500, smooth_steps=100, momentum=0.0, min_grad=0.0, use_sigmoid=False, shrink=40, shift=0.2, sigmoid_momentum=0.0,**kwargs):
+        super().__init__(warm_up, smooth_steps, momentum, min_grad, use_sigmoid, shrink, shift, sigmoid_momentum)
         self.task_loss_fn = task_loss_fn
         self.distillation_loss_fn = distillation_loss_fn
 
@@ -329,7 +333,9 @@ class SelfAdaptiveDistillationLoss(AbstractAdaptiveDistillationLoss):
         
         weights = self._calc_reduction_factor(dist_loss, validation=validation)
         if self.use_sigmoid:
-            logits_weights = shrinked_shifted_sigmoid(weights, shrink=self.shrink, shift=self.shift) 
+            logits_weights = shrinked_shifted_sigmoid(weights, shrink=self.shrink, shift=self.shift)
+            logits_weights = self.sigmoid_momentum * self.last_sigmoid + (1 - self.sigmoid_momentum) * logits_weights
+            self.last_sigmoid = logits_weights.clone()
             loss = task_loss * (1 - logits_weights) + dist_loss * logits_weights
             return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), dist_loss.unsqueeze(0), weights.unsqueeze(0), logits_weights.unsqueeze(0))).detach()
 
@@ -338,12 +344,36 @@ class SelfAdaptiveDistillationLoss(AbstractAdaptiveDistillationLoss):
         return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), dist_loss.unsqueeze(0), weights.unsqueeze(0))).detach()
 
 
+class TeacherTargetMerger(nn.Module):
+    def __init__(self, num_classes, batch_norm=True):
+        super().__init__()
+        self.teacher_conv = nn.Conv2d(num_classes, num_classes, kernel_size=1, bias=False)
+        self.teacher_bn = nn.BatchNorm2d(num_classes) if batch_norm else nn.Identity()
+
+        self.target_conv = nn.Conv2d(num_classes, num_classes, kernel_size=1, bias=False)
+        self.target_bn = nn.BatchNorm2d(num_classes) if batch_norm else nn.Identity()
+
+    def forward(self, teacher, target):
+        conv_teacher = self.teacher_conv(teacher)
+        conv_teacher = self.teacher_bn(teacher)
+
+        target = target.float()
+        target = self.target_conv(target)
+        target = self.target_bn(target)
+
+        return teacher + target + conv_teacher
+
+
 class MergingDistillationLoss(ComposedLoss):
-    name = 'SAD'
-    def __init__(self, teacher_loss_fn, task_loss_fn, warm_up=500, smooth_steps=100, momentum=0.0, min_grad=0.0, use_sigmoid=False, shrink=40, shift=40, **kwargs):
-        super().__init__(warm_up, smooth_steps, momentum, min_grad, use_sigmoid, shrink, shift)
+    name = 'MDL'
+    def __init__(self, num_classes, task_loss_fn, distillation_loss_fn, distillation_loss_coeff=0.5, batch_norm=True, **kwargs):
+        super().__init__(**kwargs)
+        self.num_classes = num_classes
+        self.distillation_loss_fn = distillation_loss_fn
         self.task_loss_fn = task_loss_fn
-        self.teacher_loss_fn = teacher_loss_fn
+        self.distillation_loss_coeff = distillation_loss_coeff
+
+        self.merger = TeacherTargetMerger(num_classes=num_classes, batch_norm=batch_norm)
 
     @property
     def component_names(self):
@@ -352,20 +382,26 @@ class MergingDistillationLoss(ComposedLoss):
         These correspond to 2nd item in the tuple returned in self.forward(...).
         See super_gradients.Trainer.train() docs for more info.
         """
-        return [self.name,
-        self.teacher_loss_fn.__class__.__name__,
+        return [
+            self.name,
+            self.task_loss_fn.__class__.__name__,
+            self.distillation_loss_fn.__class__.__name__,
+            "FTL"
         ]
 
-    def forward(self, kd_output, target, validation=False):
+    def forward(self, kd_output, target):
         student = kd_output.student_output
         teacher = kd_output.teacher_output
-        teacher_loss_map = self.teacher_loss_fn(teacher, target)
-        teacher_loss_map = teacher_loss_map / torch.max(teacher_loss_map)
 
-        soft_target = teacher * (1 - teacher_loss_map) *  + teacher_loss_map * target
+        onehot_target = rearrange(F.one_hot(target, num_classes=self.num_classes), "b h w c -> b c h w")
 
-        teacher_loss = teacher_loss_map.mean()
-        
-        loss = self.task_loss_fn(student, soft_target)
+        fixed_teacher = self.merger(teacher, onehot_target)
 
-        return loss, torch.cat((loss.unsqueeze(0), teacher_loss.unsqueeze(0))).detach()
+        fixed_teacher_loss = self.task_loss_fn(fixed_teacher, target)
+        distillation_loss = self.distillation_loss_fn(student, fixed_teacher)
+        task_loss = self.task_loss_fn(student, target)
+
+        loss = task_loss * (1 - self.distillation_loss_coeff) + distillation_loss * self.distillation_loss_coeff
+        loss += fixed_teacher_loss
+
+        return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), distillation_loss.unsqueeze(0), fixed_teacher_loss.unsqueeze(0))).detach()
