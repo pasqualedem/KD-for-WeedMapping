@@ -31,14 +31,10 @@ parameters:
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [False]
-    metric_to_watch: [loss]
+    metric_to_watch: [loss, loss/FocalLoss]
+    early_stopping_patience: [25]
     freeze_pretrained: [True]
     inform_loss_in_validaiton: [True]
-
-  early_stopping:
-    patience: [25]
-    monitor: [loss]
-    mode: [min]
 
   train_metrics:
     jaccard:

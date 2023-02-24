@@ -344,64 +344,44 @@ class SelfAdaptiveDistillationLoss(AbstractAdaptiveDistillationLoss):
         return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), dist_loss.unsqueeze(0), weights.unsqueeze(0))).detach()
 
 
-class TeacherTargetMerger(nn.Module):
-    def __init__(self, num_classes, batch_norm=True):
-        super().__init__()
-        self.teacher_conv = nn.Conv2d(num_classes, num_classes, kernel_size=1, bias=False)
-        self.teacher_bn = nn.BatchNorm2d(num_classes) if batch_norm else nn.Identity()
+# class MergingDistillationLoss(ComposedLoss):
+#     name = 'MDL'
+#     def __init__(self, num_classes, task_loss_fn, distillation_loss_fn, distillation_loss_coeff=0.5, batch_norm=True, **kwargs):
+#         super().__init__(**kwargs)
+#         self.num_classes = num_classes
+#         self.distillation_loss_fn = distillation_loss_fn
+#         self.task_loss_fn = task_loss_fn
+#         self.distillation_loss_coeff = distillation_loss_coeff
 
-        self.target_conv = nn.Conv2d(num_classes, num_classes, kernel_size=1, bias=False)
-        self.target_bn = nn.BatchNorm2d(num_classes) if batch_norm else nn.Identity()
+#         self.merger = TeacherTargetMerger(num_classes=num_classes, batch_norm=batch_norm)
 
-    def forward(self, teacher, target):
-        conv_teacher = self.teacher_conv(teacher)
-        conv_teacher = self.teacher_bn(teacher)
+#     @property
+#     def component_names(self):
+#         """
+#         Component names for logging during training.
+#         These correspond to 2nd item in the tuple returned in self.forward(...).
+#         See super_gradients.Trainer.train() docs for more info.
+#         """
+#         return [
+#             self.name,
+#             self.task_loss_fn.__class__.__name__,
+#             self.distillation_loss_fn.__class__.__name__,
+#             "FTL"
+#         ]
 
-        target = target.float()
-        target = self.target_conv(target)
-        target = self.target_bn(target)
+#     def forward(self, kd_output, target):
+#         student = kd_output.student_output
+#         teacher = kd_output.teacher_output
 
-        return teacher + target + conv_teacher
+#         onehot_target = rearrange(F.one_hot(target, num_classes=self.num_classes), "b h w c -> b c h w")
 
+#         fixed_teacher = self.merger(teacher, onehot_target)
 
-class MergingDistillationLoss(ComposedLoss):
-    name = 'MDL'
-    def __init__(self, num_classes, task_loss_fn, distillation_loss_fn, distillation_loss_coeff=0.5, batch_norm=True, **kwargs):
-        super().__init__(**kwargs)
-        self.num_classes = num_classes
-        self.distillation_loss_fn = distillation_loss_fn
-        self.task_loss_fn = task_loss_fn
-        self.distillation_loss_coeff = distillation_loss_coeff
+#         fixed_teacher_loss = self.task_loss_fn(fixed_teacher, target)
+#         distillation_loss = self.distillation_loss_fn(student, fixed_teacher)
+#         task_loss = self.task_loss_fn(student, target)
 
-        self.merger = TeacherTargetMerger(num_classes=num_classes, batch_norm=batch_norm)
+#         loss = task_loss * (1 - self.distillation_loss_coeff) + distillation_loss * self.distillation_loss_coeff
+#         loss += fixed_teacher_loss
 
-    @property
-    def component_names(self):
-        """
-        Component names for logging during training.
-        These correspond to 2nd item in the tuple returned in self.forward(...).
-        See super_gradients.Trainer.train() docs for more info.
-        """
-        return [
-            self.name,
-            self.task_loss_fn.__class__.__name__,
-            self.distillation_loss_fn.__class__.__name__,
-            "FTL"
-        ]
-
-    def forward(self, kd_output, target):
-        student = kd_output.student_output
-        teacher = kd_output.teacher_output
-
-        onehot_target = rearrange(F.one_hot(target, num_classes=self.num_classes), "b h w c -> b c h w")
-
-        fixed_teacher = self.merger(teacher, onehot_target)
-
-        fixed_teacher_loss = self.task_loss_fn(fixed_teacher, target)
-        distillation_loss = self.distillation_loss_fn(student, fixed_teacher)
-        task_loss = self.task_loss_fn(student, target)
-
-        loss = task_loss * (1 - self.distillation_loss_coeff) + distillation_loss * self.distillation_loss_coeff
-        loss += fixed_teacher_loss
-
-        return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), distillation_loss.unsqueeze(0), fixed_teacher_loss.unsqueeze(0))).detach()
+#         return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), distillation_loss.unsqueeze(0), fixed_teacher_loss.unsqueeze(0))).detach()

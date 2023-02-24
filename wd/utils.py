@@ -72,6 +72,8 @@ def load_weight_from_clearml(task_name, model_name='ckpt_best'):
 
 
 def load_checkpoint_module_fix(state_dict):
+    if 'net' in state_dict:
+        state_dict = state_dict['net']
     def remove_starts_with_module(x):
         return remove_starts_with_module(x[7:]) if x.startswith('module.') else x
     return {remove_starts_with_module(k): v for k, v in state_dict.items()}

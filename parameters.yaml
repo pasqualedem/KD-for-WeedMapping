@@ -1,6 +1,6 @@
 experiment:
   name: test/WDRE
-  group: KD/AdaptiveLoss/Sigmoid/Focal
+  group: KD/FixedTeacher
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -26,6 +26,7 @@ parameters:
       name: [focal]
       params:
         weight: [[0.0273, 1.0, 4.3802]]
+        gamma: [2.0]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
@@ -63,7 +64,7 @@ parameters:
 
   kd:
     module:
-      name: [logits_distillation]
+      name: [wd/network/kd/FixTeacherDistillationModule]
       params:
 
     teacher:
@@ -112,10 +113,5 @@ parameters:
 
 
 other_grids:
-  - kd:
-      loss:
-        params:
-          smooth_steps: [100, 1]
-          momentum: [0.9]
-          min_grad: [1e-4]
+
 

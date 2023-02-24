@@ -10,6 +10,8 @@ from ezdl.models.base import BaseModel
 from ezdl.models.heads.lawin import LawinHead
 from ezdl.models.heads.laweed import LaweedHead
 
+from wd.utils import load_checkpoint_module_fix, load_weight_from_clearml
+
 
 class BaseLawin(BaseModel):
     """
@@ -32,6 +34,14 @@ class BaseLawin(BaseModel):
             else:
                 self.main_pretrained = pretrained_channels
             self.backbone.init_pretrained_weights(self.main_pretrained)
+        if arch_params.get('pretrained'):
+            self.init_pretrained_weights(arch_params['pretrained'])
+
+    def init_pretrained_weights(self, pretrained):
+        weights = load_weight_from_clearml(pretrained)
+        weights = load_checkpoint_module_fix(weights)
+        self.load_state_dict(weights)
+
 
     def forward(self, x: Tensor) -> Tensor:
         y = self.backbone(x)

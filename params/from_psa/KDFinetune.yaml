@@ -1,6 +1,6 @@
 experiment:
   name: WDRE
-  group: KD/AdaptiveLoss/Sigmoid/Momentum
+  group: KDFinetune
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -18,7 +18,7 @@ parameters:
 
   train_params:
     max_epochs: [500]
-    initial_lr: [0.0001]
+    initial_lr: [0.0001, 0.00005, 0.00001]
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
@@ -26,15 +26,15 @@ parameters:
       name: [focal]
       params:
         weight: [[0.0273, 1.0, 4.3802]]
+        gamma: [2.0]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [False]
-    metric_to_watch: [loss, loss/FocalLoss]
+    metric_to_watch: [loss]
     early_stopping_patience: [25]
-    freeze_pretrained: [True]
-    inform_loss_in_validaiton: [True]
+    freeze_pretrained: [False]
 
   train_metrics:
     jaccard:
@@ -61,36 +61,13 @@ parameters:
       num_classes: [3]
       mdmc_average: [global]
 
-  kd:
-    module:
-      name: [logits_distillation]
-      params:
-
-    teacher:
-      name: [wd/network/ocrnet/HRNet]
-      params:
-        pretrained: [mythopoeic-godwit-66]
-        side_pretrained: ['G']
-        aux_output: [False]
-
-    loss:
-      name: [wd/loss/loss/SelfAdaptiveDistillationLoss]
-      params:
-        distillation_loss:
-          name: [vis_kldiv_loss]
-        warm_up: [1000, 2000, 3000]
-        smooth_steps: [1]
-        momentum: [0.9]
-        min_grad: [1e-4]
-        use_sigmoid: [True]
-        shrink: [0.025]
-        shift: [0.2]
-        sigmoid_momentum: [0.9]
-
   model:
     name: [lawin]
     params:
       backbone: [MiT-L0]
+      pretrained:
+        source: [clearml] 
+        run: ["chorded-esok-91", "vermicular-americanshorthair-57"]
 
   dataset:
     root: ["dataset/0_rotations_processed_003_test/RedEdge"]
@@ -115,10 +92,3 @@ parameters:
 
 
 other_grids:
-  -   kd:
-        loss:
-          params:
-            warm_up: [1000, 2000, 3000]
-            sigmoid_momentum: [0.95]
-
-
