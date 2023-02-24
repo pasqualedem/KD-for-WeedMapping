@@ -385,3 +385,39 @@ class SelfAdaptiveDistillationLoss(AbstractAdaptiveDistillationLoss):
 #         loss += fixed_teacher_loss
 
 #         return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), distillation_loss.unsqueeze(0), fixed_teacher_loss.unsqueeze(0))).detach()
+
+
+class TacherDistillationLoss(ComposedLoss):
+    name = 'TDL'
+    def __init__(self, task_loss_fn, distillation_loss_fn, distillation_loss_coeff, teacher_loss_fn,) -> None:
+        super().__init__()
+        self.task_loss = task_loss_fn
+        self.distillation_loss = distillation_loss_fn
+        self.distillation_loss_coeff = distillation_loss_coeff
+        self.teacher_loss = teacher_loss_fn
+
+    @property
+    def component_names(self):
+        """
+        Component names for logging during training.
+        These correspond to 2nd item in the tuple returned in self.forward(...).
+        See super_gradients.Trainer.train() docs for more info.
+        """
+        return [
+            self.name,
+            f"TsL:{self.task_loss.__class__.__name__}",
+            f"DL:{self.distillation_loss.__class__.__name__}",
+            f"TcL:{self.teacher_loss.__class__.__name__}",
+        ]
+
+    def forward(self, kd_output, target):
+        student = kd_output.student_output
+        teacher = kd_output.teacher_output
+
+        task_loss = self.task_loss(student, target)
+        distillation_loss = self.distillation_loss(student, teacher)
+        teacher_loss = self.teacher_loss(teacher, target)
+
+        loss = task_loss * (1 - self.distillation_loss_coeff) + distillation_loss * self.distillation_loss_coeff + teacher_loss
+
+        return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), distillation_loss.unsqueeze(0), teacher_loss.unsqueeze(0))).detach()

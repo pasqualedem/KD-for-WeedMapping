@@ -1,5 +1,5 @@
 experiment:
-  name: test/WDRE
+  name: WDRE
   group: KD/FixedTeacher
   continue_with_errors: False
   start_from_grid: 0
@@ -32,10 +32,9 @@ parameters:
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [False]
-    metric_to_watch: [loss/FocalLoss]
+    metric_to_watch: [loss]
     early_stopping_patience: [25]
-    freeze_pretrained: [True]
-    inform_loss_in_validaiton: [True]
+    pass_targets_to_net: [True]
 
   train_metrics:
     jaccard:
@@ -66,6 +65,7 @@ parameters:
     module:
       name: [wd/network/kd/FixTeacherDistillationModule]
       params:
+        num_classes: [3]
 
     teacher:
       name: [wd/network/ocrnet/HRNet]
@@ -75,15 +75,11 @@ parameters:
         aux_output: [False]
 
     loss:
-      name: [wd/loss/loss/SelfAdaptiveDistillationLoss]
+      name: [kd_logits_loss]
       params:
         distillation_loss:
           name: [vis_kldiv_loss]
-        warm_up: [500, 2000]
-        smooth_steps: [100]
-        use_sigmoid: [True]
-        shrink: [0.025]
-        shift: [0.2]
+        distillation_loss_coeff: [0.2, 0.5]
 
   model:
     name: [lawin]
@@ -113,5 +109,16 @@ parameters:
 
 
 other_grids:
-
+  - kd:
+      loss:
+        name: [wd/loss/loss/TacherDistillationLoss]
+        params:
+          distillation_loss:
+            name: [vis_kldiv_loss]
+          teacher_loss:
+              name: [focal]
+              params:
+                weight: [[0.0273, 1.0, 4.3802]]
+                gamma: [2.0]
+          distillation_loss_coeff: [0.5, 0.8, 1.0]
 

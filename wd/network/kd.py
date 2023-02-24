@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from einops import rearrange
 from ezdl.models.kd.logits import LogitsDistillationModule
+from ezdl.models import KDOutput
 
 
 class TeacherTargetMerger(nn.Module):
@@ -39,5 +40,4 @@ class FixTeacherDistillationModule(LogitsDistillationModule):
         onehot_target = rearrange(F.one_hot(target, num_classes=self.num_classes), "b h w c -> b c h w")
         kd_output = super().forward(x)
         fixed_teacher = self.teacher_fixer(kd_output.teacher_output, onehot_target)
-        kd_output.teacher_output = fixed_teacher
-        return kd_output
+        return KDOutput(kd_output.student_output, fixed_teacher)
