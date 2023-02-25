@@ -66,8 +66,6 @@ parameters:
       name: [wd/network/kd/FixTeacherDistillationModule]
       params:
         num_classes: [3]
-        merger: [attn]
-        class_space: [2, 4]
 
     teacher:
       name: [wd/network/ocrnet/HRNet]
