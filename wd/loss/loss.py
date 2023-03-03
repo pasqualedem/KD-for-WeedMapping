@@ -346,7 +346,7 @@ class SelfAdaptiveDistillationLoss(AbstractAdaptiveDistillationLoss):
 
 class AbstractTeacherAdaptiveDistillationLoss(ComposedLoss):
     name = 'AAD'
-    def __init__(self, task_loss_fn, distillation_loss_fn **kwargs):
+    def __init__(self, task_loss_fn, distillation_loss_fn, **kwargs):
         super().__init__()
         self.task_loss_fn = task_loss_fn
         self.distillation_loss_fn = distillation_loss_fn
@@ -402,33 +402,36 @@ class LegacyTeacherAdaptiveDistillationLoss(AbstractTeacherAdaptiveDistillationL
     
 
 class TeacherAdaptiveDistillationLoss(AbstractTeacherAdaptiveDistillationLoss):
+    name = "TAD"
     def __init__(self, task_loss_fn, distillation_loss_fn, N=0.2, momentum=0, **kwargs):
-        super().__init__(task_loss_fn, distillation_loss_fn, momentum, **kwargs)
+        super().__init__(task_loss_fn, distillation_loss_fn, **kwargs)
         self.momentum = momentum
         self.first_epoch = True
         self.teacher_losses = []
         self.student_losses = []
         self.N = N
+        self.last_weights = None
         self.mean_teacher_loss = None
         self.mean_student_loss = None
 
     def _weight_function(self, TL, SL):
-        if SL < self.mean_student_loss:
-            return 0.
-        if TL > self.mean_teacher_loss:
-            return 1.
-        return (SL - self.mean_teacher_loss)**self.N / (self.mean_student_loss - self.mean_student_loss)**self.N
+        if SL < self.mean_teacher_loss:
+            return torch.tensor(0., device=SL.device)
+        if SL > self.mean_student_loss:
+            return torch.tensor(1., device=SL.device)
+        return (SL - self.mean_teacher_loss)**self.N / (self.mean_student_loss - self.mean_teacher_loss)**self.N
 
     def _calc_reduction_factor(self, teacher_loss, student_loss, validation=False):
         teacher_loss = teacher_loss.detach()
         student_loss = student_loss.detach()
         if self.first_epoch:
-            if self.validation:
+            if validation:
                 self.first_epoch = False
                 self.mean_teacher_loss = torch.mean(torch.tensor(self.teacher_losses, device=teacher_loss.device))
                 self.mean_student_loss = torch.mean(torch.tensor(self.student_losses, device=student_loss.device))
             self.teacher_losses.append(teacher_loss)
-            return 1.
+            self.student_losses.append(student_loss)
+            return torch.tensor(1., device=teacher_loss.device)
         weight = self._weight_function(teacher_loss, student_loss)
         if self.last_weights is not None:
             weight = self.momentum * self.last_weights + (1 - self.momentum) * weight
