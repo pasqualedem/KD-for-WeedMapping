@@ -342,7 +342,99 @@ class SelfAdaptiveDistillationLoss(AbstractAdaptiveDistillationLoss):
         loss = task_loss * (1 - weights) + dist_loss * weights
 
         return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), dist_loss.unsqueeze(0), weights.unsqueeze(0))).detach()
+    
 
+class AbstractTeacherAdaptiveDistillationLoss(ComposedLoss):
+    name = 'AAD'
+    def __init__(self, task_loss_fn, distillation_loss_fn **kwargs):
+        super().__init__()
+        self.task_loss_fn = task_loss_fn
+        self.distillation_loss_fn = distillation_loss_fn
+
+    @property
+    def component_names(self):
+        """
+        Component names for logging during training.
+        These correspond to 2nd item in the tuple returned in self.forward(...).
+        See super_gradients.Trainer.train() docs for more info.
+        """
+        return [self.name,
+        f"T/{self.task_loss_fn.__class__.__name__}",
+        f"S/{self.task_loss_fn.__class__.__name__}",
+        self.distillation_loss_fn.__class__.__name__,
+        "DLW",
+        ]
+    
+    def _calc_reduction_factor(self, teacher_loss, student_loss, validation=False):
+        raise NotImplementedError("AbstractTeacherAdaptiveDistillationLoss is an abstract class. Please use one of its subclasses.")
+
+    def forward(self, kd_output, target, validation=False):
+        student = kd_output.student_output
+        teacher = kd_output.teacher_output
+        task_loss = self.task_loss_fn(student, target)
+        teacher_loss = self.task_loss_fn(teacher, target)
+        dist_loss = self.distillation_loss_fn(student, teacher)
+        
+        weights = self._calc_reduction_factor(teacher_loss, task_loss, validation=validation)
+        loss = task_loss * (1 - weights) + dist_loss * weights
+
+        return loss, torch.cat((loss.unsqueeze(0), teacher_loss.unsqueeze(0), task_loss.unsqueeze(0), dist_loss.unsqueeze(0), weights.unsqueeze(0))).detach()
+
+
+class LegacyTeacherAdaptiveDistillationLoss(AbstractTeacherAdaptiveDistillationLoss):
+    name = 'TAD'
+    def __init__(self, task_loss_fn, distillation_loss_fn, beta=1, momentum=0.0, shift=0.0, **kwargs):
+        super().__init__(task_loss_fn=task_loss_fn, distillation_loss_fn=distillation_loss_fn, **kwargs)
+        self.momentum = momentum
+        self.beta = beta
+        self.shift = shift
+        self.last_weights = None
+    
+    def _calc_reduction_factor(self, teacher_loss, student_loss, validation=False):
+        teacher_loss = teacher_loss.detach()
+        student_loss = student_loss.detach()
+        weight = min(max((((student_loss - self.shift))**self.beta - (teacher_loss - self.shift)**self.beta) / (student_loss - self.shift)**self.beta, 0), 1)
+        if self.last_weights is not None:
+            weight = self.momentum * self.last_weights + (1 - self.momentum) * weight
+        if not validation:
+            self.last_weights = weight
+        return weight
+    
+
+class TeacherAdaptiveDistillationLoss(AbstractTeacherAdaptiveDistillationLoss):
+    def __init__(self, task_loss_fn, distillation_loss_fn, N=0.2, momentum=0, **kwargs):
+        super().__init__(task_loss_fn, distillation_loss_fn, momentum, **kwargs)
+        self.momentum = momentum
+        self.first_epoch = True
+        self.teacher_losses = []
+        self.student_losses = []
+        self.N = N
+        self.mean_teacher_loss = None
+        self.mean_student_loss = None
+
+    def _weight_function(self, TL, SL):
+        if SL < self.mean_student_loss:
+            return 0.
+        if TL > self.mean_teacher_loss:
+            return 1.
+        return (SL - self.mean_teacher_loss)**self.N / (self.mean_student_loss - self.mean_student_loss)**self.N
+
+    def _calc_reduction_factor(self, teacher_loss, student_loss, validation=False):
+        teacher_loss = teacher_loss.detach()
+        student_loss = student_loss.detach()
+        if self.first_epoch:
+            if self.validation:
+                self.first_epoch = False
+                self.mean_teacher_loss = torch.mean(torch.tensor(self.teacher_losses, device=teacher_loss.device))
+                self.mean_student_loss = torch.mean(torch.tensor(self.student_losses, device=student_loss.device))
+            self.teacher_losses.append(teacher_loss)
+            return 1.
+        weight = self._weight_function(teacher_loss, student_loss)
+        if self.last_weights is not None:
+            weight = self.momentum * self.last_weights + (1 - self.momentum) * weight
+        if not validation:
+            self.last_weights = weight
+        return weight
 
 # class MergingDistillationLoss(ComposedLoss):
 #     name = 'MDL'

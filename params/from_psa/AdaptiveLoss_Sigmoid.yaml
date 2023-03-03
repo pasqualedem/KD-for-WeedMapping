@@ -26,6 +26,7 @@ parameters:
       name: [focal]
       params:
         weight: [[0.0273, 1.0, 4.3802]]
+        gamma: [2.0]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]

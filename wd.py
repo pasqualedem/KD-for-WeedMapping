@@ -48,7 +48,8 @@ def cli():
         experiment(settings)
     elif action == 'complexity':
         from ezdl.complexity import complexity
-        complexity()
+        param_path = args.file or 'complexity.yaml'
+        complexity(param_path)
     else:
         raise ValueError("Action not recognized")
 

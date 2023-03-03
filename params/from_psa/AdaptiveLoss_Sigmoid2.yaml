@@ -1,6 +1,6 @@
 experiment:
   name: WDRE
-  group: KD/AdaptiveLoss/Sigmoid/Momentum
+  group: KD/AdaptiveLoss/Sigmoid
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -79,14 +79,11 @@ parameters:
       params:
         distillation_loss:
           name: [vis_kldiv_loss]
-        warm_up: [1000, 2000, 3000]
-        smooth_steps: [1]
-        momentum: [0.9]
-        min_grad: [1e-4]
+        warm_up: [3000, 4000]
+        smooth_steps: [100]
         use_sigmoid: [True]
         shrink: [0.025]
         shift: [0.2]
-        sigmoid_momentum: [0.9]
 
   model:
     name: [lawin]
@@ -116,10 +113,10 @@ parameters:
 
 
 other_grids:
-  -   kd:
-        loss:
-          params:
-            warm_up: [1000, 2000, 3000]
-            sigmoid_momentum: [0.95]
-
+  - kd:
+      loss:
+        params:
+          smooth_steps: [1]
+          momentum: [0.9]
+          min_grad: [1e-4]
 

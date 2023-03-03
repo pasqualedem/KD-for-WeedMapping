@@ -1,6 +1,6 @@
 experiment:
   name: WDRE
-  group: KD/FixedTeacher
+  group: KD/TeacherAdaptiveLoss
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -23,18 +23,18 @@ parameters:
     optimizer_params:
       weight_decay: [0]
     loss:
-      name: [focal]
+      name: [dice]
       params:
-        weight: [[0.0273, 1.0, 4.3802]]
-        gamma: [2.0]
+        average: [macro] 
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
-    greater_metric_to_watch_is_better: [False]
-    metric_to_watch: [loss]
+    greater_metric_to_watch_is_better: [True]
+    metric_to_watch: [F1Score]
     early_stopping_patience: [25]
-    pass_targets_to_net: [True]
+    freeze_pretrained: [True]
+    inform_loss_in_validaiton: [True]
 
   train_metrics:
     jaccard:
@@ -63,11 +63,8 @@ parameters:
 
   kd:
     module:
-      name: [wd/network/kd/FixTeacherDistillationModule]
+      name: [logits_distillation]
       params:
-        num_classes: [3]
-        merger: [attn]
-        class_space: [2, 4]
 
     teacher:
       name: [wd/network/ocrnet/HRNet]
@@ -77,11 +74,12 @@ parameters:
         aux_output: [False]
 
     loss:
-      name: [kd_logits_loss]
+      name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
       params:
         distillation_loss:
           name: [vis_kldiv_loss]
-        distillation_loss_coeff: [0.2, 0.5]
+        momentum: [0.0, 0.9]
+        N: [0.1, 0.2, 0.3]
 
   model:
     name: [lawin]
@@ -111,16 +109,4 @@ parameters:
 
 
 other_grids:
-  - kd:
-      loss:
-        name: [wd/loss/loss/TacherDistillationLoss]
-        params:
-          distillation_loss:
-            name: [vis_kldiv_loss]
-          teacher_loss:
-              name: [focal]
-              params:
-                weight: [[0.0273, 1.0, 4.3802]]
-                gamma: [2.0]
-          distillation_loss_coeff: [0.5, 0.8, 1.0]
 

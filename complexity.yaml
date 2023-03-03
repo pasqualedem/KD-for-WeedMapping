@@ -1,0 +1,43 @@
+size: [256, 256]
+verbose: False
+per_layer_stats: False
+in_channels: 5
+batch_size: 6
+num_classes: 3
+models:
+  # - name: deeplabv3_resnet50
+  #   params:
+  - name: segnet
+    params:
+
+  - name: lawin
+    params:
+      backbone: MiT-B0
+
+  - name: lawin
+    params:
+      backbone: MiT-B1
+
+  - name: doublelawin
+    params:
+      backbone: MiT-B0
+      main_channels: 3
+      main_pretrained: [R, G, B, G, G]
+      
+  - name: doublelawin
+    params:
+      backbone: MiT-B1
+      main_channels: 3
+      main_pretrained: [R, G, B, G, G]
+
+  - name: splitlawin
+    params:
+      backbone: MiT-B0
+      main_channels: 3
+      main_pretrained: [R, G, B, G, G]
+      
+  - name: splitlawin
+    params:
+      backbone: MiT-B1
+      main_channels: 3
+      main_pretrained: [R, G, B, G, G]
