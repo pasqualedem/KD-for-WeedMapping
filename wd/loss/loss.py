@@ -9,6 +9,7 @@ Region Mutual Information Loss for Semantic Segmentation.
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+import math
 
 import torch
 import torch.nn as nn
@@ -439,48 +440,6 @@ class TeacherAdaptiveDistillationLoss(AbstractTeacherAdaptiveDistillationLoss):
             self.last_weights = weight
         return weight
 
-# class MergingDistillationLoss(ComposedLoss):
-#     name = 'MDL'
-#     def __init__(self, num_classes, task_loss_fn, distillation_loss_fn, distillation_loss_coeff=0.5, batch_norm=True, **kwargs):
-#         super().__init__(**kwargs)
-#         self.num_classes = num_classes
-#         self.distillation_loss_fn = distillation_loss_fn
-#         self.task_loss_fn = task_loss_fn
-#         self.distillation_loss_coeff = distillation_loss_coeff
-
-#         self.merger = TeacherTargetMerger(num_classes=num_classes, batch_norm=batch_norm)
-
-#     @property
-#     def component_names(self):
-#         """
-#         Component names for logging during training.
-#         These correspond to 2nd item in the tuple returned in self.forward(...).
-#         See super_gradients.Trainer.train() docs for more info.
-#         """
-#         return [
-#             self.name,
-#             self.task_loss_fn.__class__.__name__,
-#             self.distillation_loss_fn.__class__.__name__,
-#             "FTL"
-#         ]
-
-#     def forward(self, kd_output, target):
-#         student = kd_output.student_output
-#         teacher = kd_output.teacher_output
-
-#         onehot_target = rearrange(F.one_hot(target, num_classes=self.num_classes), "b h w c -> b c h w")
-
-#         fixed_teacher = self.merger(teacher, onehot_target)
-
-#         fixed_teacher_loss = self.task_loss_fn(fixed_teacher, target)
-#         distillation_loss = self.distillation_loss_fn(student, fixed_teacher)
-#         task_loss = self.task_loss_fn(student, target)
-
-#         loss = task_loss * (1 - self.distillation_loss_coeff) + distillation_loss * self.distillation_loss_coeff
-#         loss += fixed_teacher_loss
-
-#         return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), distillation_loss.unsqueeze(0), fixed_teacher_loss.unsqueeze(0))).detach()
-
 
 class TacherDistillationLoss(ComposedLoss):
     name = 'TDL'
@@ -516,3 +475,62 @@ class TacherDistillationLoss(ComposedLoss):
         loss = task_loss * (1 - self.distillation_loss_coeff) + distillation_loss * self.distillation_loss_coeff + teacher_loss
 
         return loss, torch.cat((loss.unsqueeze(0), task_loss.unsqueeze(0), distillation_loss.unsqueeze(0), teacher_loss.unsqueeze(0))).detach()
+    
+
+class AnnealingLoss(ComposedLoss):
+    name = "AL"
+    def __init__(self, max_temperature, max_epochs) -> None:
+        self.phi = TemperatureAnnealing(max_temperature=max_temperature, max_epochs=max_epochs)
+        super().__init__()
+
+    @property
+    def component_names(self):
+        """
+        Component names for logging during training.
+        These correspond to 2nd item in the tuple returned in self.forward(...).
+        See super_gradients.Trainer.train() docs for more info.
+        """
+        return [
+            self.name,
+            "phi",
+        ]
+
+    def forward(self, kd_output, target, context):
+        student = kd_output.student_output
+        teacher = kd_output.teacher_output
+
+        epoch = context.epoch
+        if epoch is None:
+            temperature = 1
+        else:
+            temperature = self.phi(epoch)
+
+        KD_anneal_loss = torch.nn.functional.mse_loss(student, teacher*temperature, reduction='mean')
+
+        return KD_anneal_loss, torch.cat((KD_anneal_loss.unsqueeze(0), torch.tensor(temperature, device=KD_anneal_loss.device).unsqueeze(0))).detach()
+
+
+def linear_annealing(epoch, max_temp, max_epochs):
+    """Linear annealing function."""
+    return (1 - max_temp) / max_epochs * epoch + max_temp
+
+
+annealing_dict = {
+    'linear': linear_annealing,
+}
+
+
+class TemperatureAnnealing:
+    """Cosine based annealing funtion to anneal temperature parameter."""
+    def __init__(self, max_temperature, max_epochs, annealing_type='linear'):
+        super(TemperatureAnnealing, self).__init__()
+        self.annealing_fun = annealing_dict[annealing_type]
+        self.T_max = max_temperature
+        self.itr_end = max_epochs
+
+    def __call__(self, epoch):
+        T = self.annealing_fun(epoch, self.T_max, self.itr_end)
+        phi = 1 - (T - 1) / self.T_max
+        return phi
+
+

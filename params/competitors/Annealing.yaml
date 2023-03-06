@@ -1,6 +1,6 @@
 experiment:
   name: WDRE
-  group: KDFinetune
+  group: KD/Annealing
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -17,23 +17,24 @@ parameters:
   dataset_interface: [wd/data/WeedMapDatasetInterface]
 
   train_params:
-    max_epochs: [500]
-    initial_lr: [0.0001, 0.00005, 0.00001]
+    max_epochs: [50]
+    initial_lr: [0.0001]
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
     loss:
-      name: [wd/loss/loss/RMILoss]
+      name: [wd/loss/loss/AnnealingLoss]
       params:
-        num_classes: [3]
+        max_epochs: [50]
+        max_temperature: [9.0]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
-    greater_metric_to_watch_is_better: [False]
+    greater_metric_to_watch_is_better: [True]
     metric_to_watch: [F1Score]
-    early_stopping_patience: [25]
-    freeze_pretrained: [False]
+    freeze_pretrained: [True]
+    pass_context_to_loss: [True]
 
   train_metrics:
     jaccard:
@@ -60,13 +61,22 @@ parameters:
       num_classes: [3]
       mdmc_average: [global]
 
+  kd:
+    module:
+      name: [logits_distillation]
+      params:
+
+    teacher:
+      name: [wd/network/ocrnet/HRNet]
+      params:
+        pretrained: [mythopoeic-godwit-66]
+        side_pretrained: ['G']
+        aux_output: [False]
+
   model:
     name: [lawin]
     params:
       backbone: [MiT-L0]
-      pretrained:
-        source: [clearml] 
-        run: ["citified-barnacle-50", "invulnerable-hanumanmonkey-65", "antimoral-watermoccasin-53"]
 
   dataset:
     root: ["dataset/0_rotations_processed_003_test/RedEdge"]
@@ -91,3 +101,13 @@ parameters:
 
 
 other_grids:
+  - train_params:
+      max_epochs: [100]
+      loss:
+        params:
+          max_epochs: [100]
+  - train_params:
+      max_epochs: [150]
+      loss:
+        params:
+          max_epochs: [150]
