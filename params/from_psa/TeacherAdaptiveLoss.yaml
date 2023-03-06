@@ -1,0 +1,112 @@
+experiment:
+  name: WDRE
+  group: KD/TeacherAdaptiveLoss
+  continue_with_errors: False
+  start_from_grid: 0
+  start_from_run: 0
+  logger: clearml
+  tracking_dir: null
+  entity: null
+  excluded_files: "*.pth"
+
+parameters:
+  tags: [[]]
+  # train, test, inference
+  # phases: [[run]]
+  phases: [[train, test]]
+  dataset_interface: [wd/data/WeedMapDatasetInterface]
+
+  train_params:
+    max_epochs: [500]
+    initial_lr: [0.0001]
+    optimizer: [Adam]
+    optimizer_params:
+      weight_decay: [0]
+    loss:
+      name: [dice]
+      params:
+        average: [macro] 
+    # ema: True
+    seed: [42]
+    zero_weight_decay_on_bias_and_bn: [True]
+    average_best_models: [False]
+    greater_metric_to_watch_is_better: [True]
+    metric_to_watch: [F1Score]
+    early_stopping_patience: [25]
+    freeze_pretrained: [True]
+    inform_loss_in_validaiton: [True]
+
+  train_metrics:
+    jaccard:
+      num_classes: [3]
+    f1:
+      average: [macro]
+      num_classes: [3]
+      mdmc_average: [global]
+  test_metrics:
+    jaccard:
+      num_classes: [3]
+    conf_mat:
+      num_classes: [3]
+    f1:
+      num_classes: [3]
+      average: [macro]
+      mdmc_average: [global]
+    precision:
+      average: [macro]
+      num_classes: [3]
+      mdmc_average: [global]
+    recall:
+      average: [macro]
+      num_classes: [3]
+      mdmc_average: [global]
+
+  kd:
+    module:
+      name: [logits_distillation]
+      params:
+
+    teacher:
+      name: [wd/network/ocrnet/HRNet]
+      params:
+        pretrained: [mythopoeic-godwit-66]
+        side_pretrained: ['G']
+        aux_output: [False]
+
+    loss:
+      name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
+      params:
+        distillation_loss:
+          name: [vis_kldiv_loss]
+        momentum: [0.0, 0.9]
+        N: [0.1, 0.2, 0.3]
+
+  model:
+    name: [lawin]
+    params:
+      backbone: [MiT-L0]
+
+  dataset:
+    root: ["dataset/0_rotations_processed_003_test/RedEdge"]
+    train_folders: [['000', '001', '002', '004']]
+    test_folders: [['003']]
+    hor_flip: [True]
+    ver_flip: [True]
+    channels: [['R', 'G', 'B', 'NIR', 'RE']]
+    batch_size: [6]
+    val_batch_size: [12]
+    test_batch_size: [12]
+    num_workers: [0]
+    num_classes: [3]
+    return_path: [True]
+    size: [same]
+    crop_size: [same]
+
+  val_callbacks: 
+    SegmentationVisualizationCallback:
+  test_callbacks: 
+    SegmentationVisualizationCallback:
+
+
+other_grids:
+
