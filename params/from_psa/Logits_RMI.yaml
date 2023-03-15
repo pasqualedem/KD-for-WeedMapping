@@ -1,6 +1,6 @@
 experiment:
   name: WDRE
-  group: KD/ATAKD/p2
+  group: KD/Lawin/RMI
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -34,7 +34,6 @@ parameters:
     metric_to_watch: [F1Score]
     early_stopping_patience: [25]
     freeze_pretrained: [True]
-    inform_loss_in_validaiton: [True]
 
   train_metrics:
     jaccard:
@@ -67,22 +66,18 @@ parameters:
       params:
 
     teacher:
-      name: [lawin]
+      name: [wd/network/ocrnet/HRNet]
       params:
-        backbone: [MiT-B0]
-        backbone_pretrained: [True]
-        main_channels: [5]
-        main_pretrained: [['R', 'G', 'B', 'G', 'G']]
-        pretrained: 
-          run: [ashen-chupacabra-48]
+        pretrained: [mythopoeic-godwit-66]
+        side_pretrained: ['G']
+        aux_output: [False]
 
     loss:
-      name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
+      name: [kd_logits_loss]
       params:
         distillation_loss:
-          name: [vis_kldiv_loss]
-        momentum: [0.0]
-        N: [0.1]
+          name: [vis_kldiv_loss, MSELoss]
+        distillation_loss_coeff: [0.8]
 
   model:
     name: [lawin]
@@ -112,58 +107,3 @@ parameters:
 
 
 other_grids:
-  - kd:
-      teacher:
-        name: [lawin]
-        params:
-          pretrained: 
-            run: [afraid-xantus-64]
-      loss:
-        name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
-        params:
-          momentum: [0.0]
-          N: [0.2]
-  - kd:
-      teacher:
-        name: [lawin]
-        params:
-          pretrained: 
-            run: [unfragrant-antelopegroundsquirrel-16]
-      loss:
-        name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
-        params:
-          momentum: [0.0]
-          N: [0.3]
-  - kd:
-      teacher:
-        name: [lawin]
-        params:
-          pretrained: 
-            run: [oozy-needletail-96]
-      loss:
-        name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
-        params:
-          momentum: [0.9]
-          N: [0.1]
-  - kd:
-      teacher:
-        name: [lawin]
-        params:
-          pretrained: 
-            run: [endless-kid-78]
-      loss:
-        name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
-        params:
-          momentum: [0.9]
-          N: [0.2]
-  - kd:
-      teacher:
-        name: [lawin]
-        params:
-          pretrained: 
-            run: [shorted-jaguarundi-100]
-      loss:
-        name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
-        params:
-          momentum: [0.9]
-          N: [0.3]
