@@ -1,6 +1,6 @@
 experiment:
   name: WDSE
-  group: PSA/RMI_Aux
+  group: PSA/RMI_Aux_exp
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -18,7 +18,7 @@ parameters:
 
   train_params:
     max_epochs: [500]
-    initial_lr: [0.0001]
+    initial_lr: [0.1, 0.01]
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
@@ -26,6 +26,7 @@ parameters:
       name: [wd/loss/loss/RMILoss]
       params:
         num_classes: [3]
+        weight: [[0.0273, 1.0, 4.3802]]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
@@ -34,6 +35,10 @@ parameters:
     metric_to_watch: [loss/RMILoss]
     early_stopping_patience: [25]
     freeze_pretrained: [False]
+    scheduler:
+      name: [ExpLR]
+      params:
+        gamma: [0.5, 0.9]
 
   aux_loss:
     name: [auxiliary_loss]
@@ -42,6 +47,7 @@ parameters:
       aux_loss: 
         name: [cross_entropy]
         params:
+          weight: [[0.0273, 1.0, 4.3802]]
 
   train_metrics:
     jaccard:
@@ -98,16 +104,3 @@ parameters:
 
 
 other_grids:
-  - aux_loss:
-      name: [auxiliary_loss]
-      params:
-        aux_loss: 
-          name: [cross_entropy]
-          params:
-            weight: [[0.0273, 1.0, 4.3802]]
-    train_params:
-      loss:
-        name: [wd/loss/loss/RMILoss]
-        params:
-          num_classes: [3]
-          weight: [[0.0273, 1.0, 4.3802]]
