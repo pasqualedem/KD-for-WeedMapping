@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torchvision.transforms import transforms
 
-from weeddata.sequoia import WeedMapDataset
+from wd.data.weedmap import WeedMapDataset
 
 WORKERS = multiprocessing.cpu_count()
 BATCH_SIZE = 256

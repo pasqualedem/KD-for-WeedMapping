@@ -1,6 +1,6 @@
 experiment:
   name: WDSE
-  group: cleaned/PSA/RMI_Aux
+  group: PSA/RMI_Aux
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -34,6 +34,10 @@ parameters:
     metric_to_watch: [loss/RMILoss]
     early_stopping_patience: [25]
     freeze_pretrained: [False]
+    scheduler:
+      name: [PolyLR]
+      params:
+        power: [2]
 
   aux_loss:
     name: [auxiliary_loss]
@@ -76,9 +80,9 @@ parameters:
       aux_output: [True]
 
   dataset:
-    root: ["dataset/4_rotations_cleaned_006_test/Sequoia"]
-    train_folders: [['005', '007']]
-    test_folders: [['006']]
+    root: ["dataset/4_rotations_processed_007_test/Sequoia"]
+    train_folders: [['005', '006']]
+    test_folders: [['007']]
     hor_flip: [True]
     ver_flip: [True]
     channels: [['R', 'G', 'NIR', 'RE']]
@@ -99,16 +103,3 @@ parameters:
 
 
 other_grids:
-  - train_params:
-      loss:
-        name: [wd/loss/loss/RMILoss]
-        params:
-          weight: &weight [[0.0062, 1.0000, 1.9566]]
-
-    aux_loss:
-      name: [auxiliary_loss]
-      params:
-        aux_loss: 
-          name: [cross_entropy]
-          params:
-            weight: *weight

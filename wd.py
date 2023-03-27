@@ -20,7 +20,7 @@ parser.add_argument("--filters", type=json.loads, help="Filters to query in the 
 parser.add_argument('-s', "--stage", type=json.loads, help="Stages to execute in the resuming mode")
 
 parser.add_argument('--subset', type=str, help="Subset chosen for preprocessing and augmentation")
-
+parser.add_argument('--cleaned', help="Augment on processed or cleaned dataset", action='store_true', default=False)
 
 def cli():
     args = parser.parse_args()
@@ -36,7 +36,7 @@ def cli():
         preprocess(args.subset)
     elif action == 'augment':
         from wd.augment import augment
-        augment(args.subset)
+        augment(args.subset, args.cleaned)
     elif action == 'experiment':
         from ezdl.experiment.experiment import experiment
         param_path = args.file or 'parameters.yaml'
@@ -50,6 +50,12 @@ def cli():
         from ezdl.complexity import complexity
         param_path = args.file or 'complexity.yaml'
         complexity(param_path)
+    elif action == 'count':
+        from wd.data.count_classes import count_classes
+        count_classes()
+    elif action == 'clean':
+        from wd.clean import clean
+        clean(args.subset)
     else:
         raise ValueError("Action not recognized")
 

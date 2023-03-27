@@ -1,6 +1,6 @@
 experiment:
   name: WDSE
-  group: cleaned/PSA/RMI_Aux
+  group: PSA/RMI_Aux
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -18,7 +18,7 @@ parameters:
 
   train_params:
     max_epochs: [500]
-    initial_lr: [0.01, 0.005]
+    initial_lr: [0.0001]
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
@@ -76,9 +76,9 @@ parameters:
       aux_output: [True]
 
   dataset:
-    root: ["dataset/4_rotations_cleaned_006_test/Sequoia"]
-    train_folders: [['005', '007']]
-    test_folders: [['006']]
+    root: ["dataset/4_rotations_processed_007_test/Sequoia"]
+    train_folders: [['005', '006']]
+    test_folders: [['007']]
     hor_flip: [True]
     ver_flip: [True]
     channels: [['R', 'G', 'NIR', 'RE']]
@@ -91,7 +91,6 @@ parameters:
     size: [same]
     crop_size: [same]
 
-
   val_callbacks: 
     SegmentationVisualizationCallback:
   test_callbacks: 
@@ -99,16 +98,14 @@ parameters:
 
 
 other_grids:
-  - train_params:
-      loss:
-        name: [wd/loss/loss/RMILoss]
-        params:
-          weight: &weight [[0.0062, 1.0000, 1.9566]]
-
-    aux_loss:
+  - aux_loss:
       name: [auxiliary_loss]
       params:
         aux_loss: 
           name: [cross_entropy]
           params:
-            weight: *weight
+    train_params:
+      loss:
+        name: [wd/loss/loss/RMILoss]
+        params:
+          num_classes: [3]

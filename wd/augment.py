@@ -104,28 +104,29 @@ def generate_test(root, target_root, test_folders, channels):
                 .save(os.path.join(target_root, f, "tile", 'CIR', f"{name}_{k}.png"))
 
 
-def augment(subset):
+def augment(subset, cleaned=False):
     """
     Calculate the mean and the standard deviation of a dataset
     """
     torch.manual_seed(42)
     global ROTATIONS
+    subfolder = "cleaned" if cleaned else "processed"
 
     # Sequoia 277 images with weed on 337 (x4) images
     if subset == "Sequoia":
         ROTATIONS = ROTATIONS_SEQUOIA
-        root = "./dataset/processed/Sequoia"
-        train_folders = ['006', '007']
-        test_folders = ['005']
-        target_root = f"./dataset/{ROTATIONS}_rotations_processed_{'-'.join(test_folders)}_test/Sequoia"
+        root = f"./dataset/{subfolder}/Sequoia"
+        train_folders = ['005', '007']
+        test_folders = ['006']
+        target_root = f"./dataset/{ROTATIONS}_rotations_{subfolder}_{'-'.join(test_folders)}_test/Sequoia"
         channels = ['R', 'G', 'NDVI', 'NIR', 'RE']
     elif subset == "RedEdge":
         # RedEdge 1285 images with weed on 455 (x4) images
         ROTATIONS = ROTATIONS_REDEDGE
-        root = "./dataset/processed/RedEdge"
+        root = f"./dataset/{subfolder}/RedEdge"
         train_folders = ['000', '001', '002', '004']
         test_folders = ['003']
-        target_root = f"./dataset/{ROTATIONS}_rotations_processed_{'-'.join(test_folders)}_test/RedEdge"
+        target_root = f"./dataset/{ROTATIONS}_rotations_{subfolder}_{'-'.join(test_folders)}_test/RedEdge"
         channels = ['R', 'G', 'B', 'NDVI', 'NIR', 'RE']
     else:
         raise Exception("Subset not recognized")
