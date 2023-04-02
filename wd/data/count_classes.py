@@ -68,10 +68,11 @@ def count(root, folders, channels):
 
 def count_classes():
     # SEQUOIA
-    root = "./dataset/4_rotations_processed_006_test/Sequoia"
+    root = "./dataset/4_rotations_cleaned_006_test/Sequoia"
     folders = ['005', '007']
     channels = ['R', 'G', 'NDVI', 'NIR', 'RE']
-    # 005 007 [0.0062, 1.0000, 1.9566]   
+    # 005 007 [0.0062, 1.0000, 1.9566] processed
+    # 005 007 [0.0074, 1.0000, 2.1376] cleaned
 
     # REDEDGE
     # root = "./dataset/processed/RedEdge"

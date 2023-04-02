@@ -116,8 +116,8 @@ def augment(subset, cleaned=False):
     if subset == "Sequoia":
         ROTATIONS = ROTATIONS_SEQUOIA
         root = f"./dataset/{subfolder}/Sequoia"
-        train_folders = ['005', '007']
-        test_folders = ['006']
+        train_folders = ['006', '007']
+        test_folders = ['005']
         target_root = f"./dataset/{ROTATIONS}_rotations_{subfolder}_{'-'.join(test_folders)}_test/Sequoia"
         channels = ['R', 'G', 'NDVI', 'NIR', 'RE']
     elif subset == "RedEdge":
