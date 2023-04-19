@@ -1,6 +1,6 @@
 experiment:
-  name: WDRE
-  group: KD/TeacherAdaptiveLoss
+  name: WDSE
+  group: cleaned/PSA/RMI_Aux
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -25,20 +25,27 @@ parameters:
     loss:
       name: [wd/loss/loss/RMILoss]
       params:
-        num_classes: [3]
+        num_classes: &num_classes [3]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
-    greater_metric_to_watch_is_better: [True]
-    metric_to_watch: [f1]
+    greater_metric_to_watch_is_better: [False]
+    metric_to_watch: [loss/RMILoss]
     early_stopping_patience: [25]
-    freeze_pretrained: [True]
-    inform_loss_in_validaiton: [True]
+    freeze_pretrained: [False]
+
+  aux_loss:
+    name: [auxiliary_loss]
+    params:
+      aux_loss_coeff: [0.3]
+      aux_loss: 
+        name: [cross_entropy]
+        params:
 
   train_metrics:
     f1: &metric_params
-      num_classes: &num_classes [3]
+      num_classes: *num_classes
   test_metrics:
     jaccard: *metric_params
     conf_mat: *metric_params
@@ -46,38 +53,20 @@ parameters:
     precision: *metric_params
     recall: *metric_params
 
-  kd:
-    module:
-      name: [logits_distillation]
-      params:
-
-    teacher:
-      name: [wd/network/ocrnet/HRNet]
-      params:
-        pretrained: [mythopoeic-godwit-66]
-        side_pretrained: ['G']
-        aux_output: [False]
-
-    loss:
-      name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
-      params:
-        distillation_loss:
-          name: [vis_kldiv_loss, MSELoss]
-        momentum: [0.0, 0.9]
-        N: [0.1, 0.2, 0.3]
-
   model:
-    name: [lawin]
+    name: [wd/network/ocrnet/HRNet]
     params:
-      backbone: [MiT-L0, MiT-L1, MiT-L2]
+      pretrained: [True]
+      side_pretrained: ['G']
+      aux_output: [True]
 
   dataset:
-    root: ["dataset/0_rotations_processed_003_test/RedEdge"]
-    train_folders: [['000', '001', '002', '004']]
-    test_folders: [['003']]
+    root: ["dataset/4_rotations_cleaned_005_test/Sequoia"]
+    train_folders: [['006', '007']]
+    test_folders: [['005']]
     hor_flip: [True]
     ver_flip: [True]
-    channels: [['R', 'G', 'B', 'NIR', 'RE']]
+    channels: [['R', 'G', 'NIR', 'RE']]
     batch_size: [6]
     val_batch_size: [12]
     test_batch_size: [12]
@@ -91,10 +80,24 @@ parameters:
     PerExampleMetricCallback:
       phase: [TEST_BATCH_END]
     SegmentationVisualizationCallback:
+      use_plotly: [True]
   val_callbacks: 
     SegmentationVisualizationCallback: 
-      batch_idxs: [[4]]
+      use_plotly: [True]
+      batch_idxs: [[0, 1, 2, 3, 4]]
 
 
 other_grids:
-
+  - aux_loss:
+      name: [auxiliary_loss]
+      params:
+        aux_loss: 
+          name: [cross_entropy]
+          params:
+            weight: &weight [[0.0186, 1.0000, 3.9333]]
+    train_params:
+      loss:
+        name: [wd/loss/loss/RMILoss]
+        params:
+          num_classes: [3]
+          weight: *weight

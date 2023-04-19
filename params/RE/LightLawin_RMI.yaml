@@ -47,7 +47,7 @@ parameters:
   model:
     name: [lawin]
     params:
-      backbone: [MiT-LD, MiT-L0, MiT-L1]
+      backbone: [MiT-LD, MiT-L0, MiT-L1, MiT-L2]
 
   dataset:
     root: ["dataset/0_rotations_processed_003_test/RedEdge"]
@@ -65,10 +65,13 @@ parameters:
     size: [same]
     crop_size: [same]
 
+  test_callbacks:
+    PerExampleMetricCallback:
+      phase: [TEST_BATCH_END]
+    SegmentationVisualizationCallback:
   val_callbacks: 
-    SegmentationVisualizationCallback:
-  test_callbacks: 
-    SegmentationVisualizationCallback:
+    SegmentationVisualizationCallback: 
+      batch_idxs: [[4]]
 
 
 other_grids:
