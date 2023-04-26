@@ -15,7 +15,7 @@ from ezdl.data import DatasetInterface
 from ezdl.transforms import Denormalize
 
 class CamVidDatasetInterface(DatasetInterface):
-
+    size = (3, 720, 960)
     lib_dataset_params = {
             'mean': [0.39068785, 0.40521392, 0.41434407],
             'std': [0.29652068, 0.30514979, 0.30080369]
@@ -34,6 +34,7 @@ class CamVidDatasetInterface(DatasetInterface):
         classes = pd.read_csv(pjoin(self.root_dir, "class_dict.csv"))
         labels = dict(zip(range(len(classes)), classes['name'].tolist()))
         color_map = dict(zip(range(len(classes)),classes.iloc[:,1:].values.tolist()))
+        self.cmap = color_map
         
         assert len(train_images) == len(train_labels)
         
@@ -57,15 +58,17 @@ class CamVidDatasetInterface(DatasetInterface):
         
         test_set = list(zip(test_images,test_labels))
 
-        train_transform, test_transform = self.get_transforms()
+        train_transform, test_transform = self.get_transforms(dataset_params)
 
-        self.trainset = CamVidDataset(train_set, color_map, labels, train_transform)
-        self.valset = CamVidDataset(val_set, color_map, labels, test_transform)
-        self.testset = CamVidDataset(test_set, color_map, labels, test_transform)
+        self.trainset = CamVidDataset(train_set, color_map, labels, train_transform, return_name=dataset_params.get('return_name', False))
+        self.valset = CamVidDataset(val_set, color_map, labels, test_transform, return_name=dataset_params.get('return_name', False))
+        self.testset = CamVidDataset(test_set, color_map, labels, test_transform, return_name=dataset_params.get('return_name', False))
 
-    def get_transforms(self):
+    def get_transforms(self, dataset_params={}):
+        size = dataset_params.get('size', self.size[1:])
 
         test_transform = A.Compose([
+            A.Resize(size[0], size[1]),
             A.Normalize(self.lib_dataset_params['mean'], self.lib_dataset_params['std']),
         ])
         transform = A.Compose([
@@ -73,6 +76,7 @@ class CamVidDatasetInterface(DatasetInterface):
             A.HorizontalFlip(),
             A.RandomBrightnessContrast(),
             A.GaussianBlur(blur_limit=(1,5)),
+            A.Resize(size[0], size[1]),
             A.Normalize(self.lib_dataset_params['mean'], self.lib_dataset_params['std']),
         ])
 
@@ -83,11 +87,14 @@ class CamVidDatasetInterface(DatasetInterface):
 
 
 class CamVidDataset:
-    def __init__(self, split, cmap, labels, transforms, single=None):
+    def __init__(self, split, cmap, labels, transforms, single=None, return_name=False):
         self.split = split
         self.cmap = cmap
         self.transforms = transforms
         self.classes = {y:x for x,y in labels.items()}
+        self.CLASS_LABELS = labels
+        self.return_name = return_name
+        self.classes = list(labels.keys())
 
         self.single = self.classes[single] if single is not None else None
         
@@ -107,7 +114,7 @@ class CamVidDataset:
         
         aug = self.transforms(image=sample,mask=seg)
             
-        sample,seg = aug['image'],aug['mask']
+        sample,seg = aug['image'], aug['mask']
         
         mask_shape = *seg.shape[:2],len(self.cmap)
         mask = np.zeros(mask_shape)
@@ -118,10 +125,12 @@ class CamVidDataset:
             
         if self.single is not None:
             mask = mask[:,:,self.single]
-            mask = torch.tensor(mask,dtype=torch.float32).unsqueeze(2).permute(2,0,1)
+            mask = torch.tensor(mask, dtype=torch.long).unsqueeze(2).permute(2,0,1).argmax(0)
         else:
-            mask = torch.tensor(mask,dtype=torch.float32).permute(2,0,1)
+            mask = torch.tensor(mask, dtype=torch.long).permute(2,0,1).argmax(0)
             
         sample = img_to_tensor(sample)
-    
-        return sample,mask
+        if self.return_name:
+            return sample, mask, {'input_name': str(self.split[idx][0]).split("/")[-1]}
+
+        return sample, mask
