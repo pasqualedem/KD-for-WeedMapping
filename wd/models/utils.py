@@ -21,85 +21,19 @@ from urllib.parse import urlparse, unquote
 import yaml
 import numpy as np
 import paddle
-import cv2
-
-from paddleseg.utils import logger, seg_env, get_sys_env
-from paddleseg.utils.download import download_file_and_uncompress
 
 
-def set_seed(seed=None):
-    if seed is not None:
-        paddle.seed(seed)
-        np.random.seed(seed)
-        random.seed(seed)
+from wd.utils.download import download_file_and_uncompress
 
+from ezdl.logger.text_logger import get_logger
 
-def show_env_info():
-    env_info = get_sys_env()
-    info = ['{}: {}'.format(k, v) for k, v in env_info.items()]
-    info = '\n'.join(['', format('Environment Information', '-^48s')] + info +
-                     ['-' * 48])
-    logger.info(info)
-
-
-def show_cfg_info(config):
-    msg = '\n---------------Config Information---------------\n'
-    ordered_module = ('batch_size', 'iters', 'train_dataset', 'val_dataset',
-                      'optimizer', 'lr_scheduler', 'loss', 'model')
-    all_module = set(config.dic.keys())
-    for module in ordered_module:
-        if module in config.dic:
-            module_dic = {module: config.dic[module]}
-            msg += str(yaml.dump(module_dic, Dumper=NoAliasDumper))
-            all_module.remove(module)
-    for module in all_module:
-        module_dic = {module: config.dic[module]}
-        msg += str(yaml.dump(module_dic, Dumper=NoAliasDumper))
-    msg += '------------------------------------------------\n'
-    logger.info(msg)
-
-
-def set_device(device):
-    env_info = get_sys_env()
-    if device == 'gpu' and env_info['Paddle compiled with cuda'] \
-        and env_info['GPUs used']:
-        place = 'gpu'
-    elif device == 'xpu' and paddle.is_compiled_with_xpu():
-        place = 'xpu'
-    elif device == 'npu' and paddle.is_compiled_with_custom_device('npu'):
-        place = 'npu'
-    elif device == 'mlu' and paddle.is_compiled_with_mlu():
-        place = 'mlu'
-    else:
-        place = 'cpu'
-    paddle.set_device(place)
-    logger.info("Set device: {}".format(place))
-
-
-def convert_sync_batchnorm(model, device):
-    # Convert bn to sync_bn when use multi GPUs
-    env_info = get_sys_env()
-    if device == 'gpu' and env_info['Paddle compiled with cuda'] \
-        and env_info['GPUs used'] and paddle.distributed.ParallelEnv().nranks > 1:
-        model = paddle.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        logger.info("Convert bn to sync_bn")
-    return model
-
-
-def set_cv2_num_threads(num_workers):
-    # Limit cv2 threads if too many subprocesses are spawned.
-    # This should reduce resource allocation and thus boost performance.
-    nranks = paddle.distributed.ParallelEnv().nranks
-    if nranks >= 8 and num_workers >= 8:
-        logger.warning("The number of threads used by OpenCV is " \
-            "set to 1 to improve performance.")
-        cv2.setNumThreads(1)
+logger = get_logger(__name__)
 
 
 @contextlib.contextmanager
 def generate_tempdir(directory: str=None, **kwargs):
     '''Generate a temporary directory'''
-    directory = seg_env.TMP_HOME if not directory else directory
+    directory = "tmp"
     with tempfile.TemporaryDirectory(dir=directory, **kwargs) as _dir:
         yield _dir
 
@@ -137,7 +71,7 @@ def download_pretrained_model(pretrained_model):
             pretrained_model,
             savepath=_dir,
             cover=False,
-            extrapath=seg_env.PRETRAINED_MODEL_HOME,
+            extrapath="checkpoints",
             extraname=savename,
             filename=filename)
         pretrained_model = os.path.join(pretrained_model, filename)
