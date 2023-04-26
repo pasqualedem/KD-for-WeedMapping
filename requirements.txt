@@ -2,4 +2,5 @@ wget
 ezdl
 scikit-learn
 albumentations
+paddlepaddle-gpu
 git+https://github.com/zsef123/Connected_components_PyTorch.git
