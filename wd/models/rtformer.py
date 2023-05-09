@@ -63,15 +63,16 @@ class RTFormer(nn.Layer):
                  use_injection=[True, True],
                  lr_mult=10.,
                  cross_size=12,
-                 in_channels=3,
-                 pretrained=None):
+                 input_channels=3,
+                 pretrained=None,
+                 **kwargs):
         super().__init__()
         self.base_channels = base_channels
         base_chs = base_channels
 
         self.conv1 = nn.Sequential(
             nn.Conv2D(
-                in_channels, base_chs, kernel_size=3, stride=2, padding=1),
+                input_channels, base_chs, kernel_size=3, stride=2, padding=1),
             bn2d(base_chs),
             nn.ReLU(),
             nn.Conv2D(
@@ -175,6 +176,7 @@ class RTFormer(nn.Layer):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        x = paddle.Tensor(x.cpu().numpy())
         x1 = self.layer1(self.conv1(x))  # c, 1/4
         x2 = self.layer2(self.relu(x1))  # 2c, 1/8
         x3 = self.layer3(self.relu(x2))  # 4c, 1/16
@@ -206,6 +208,13 @@ class RTFormer(nn.Layer):
         ]
 
         return logit_list
+    
+    def to(self, device=None, dtype=None, blocking=None):
+        device = "gpu" if device == 'cuda' else device
+        return super().to(device, dtype, blocking)
+
+    def named_modules(self):
+        return self.named_parameters()
 
 
 def conv2d(in_channels,
