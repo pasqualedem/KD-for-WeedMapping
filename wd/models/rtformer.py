@@ -1,4 +1,4 @@
-# Copyright (c) 2022 PaddlePaddle Authors. All Rights Reserved.
+# Copyright (c) 2022 torch Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,12 @@
 # limitations under the License.
 
 
-import paddle
-import paddle.nn as nn
-import paddle.nn.functional as F
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
+from einops import rearrange
+from ezdl.models import ComposedOutput
 
 from wd.models import utils
 from wd.models.layers import (DropPath, Identity)
@@ -24,9 +26,9 @@ from wd.models.param_init import (constant_init, kaiming_normal_init,
                                          trunc_normal_init)
 
 
-class RTFormer(nn.Layer):
+class RTFormer(nn.Module):
     """
-    The RTFormer implementation based on PaddlePaddle.
+    The RTFormer implementation based on torch.
 
     The original article refers to "Wang, Jian, Chenhui Gou, Qiman Wu, Haocheng Feng, 
     Junyu Han, Errui Ding, and Jingdong Wang. RTFormer: Efficient Design for Real-Time
@@ -69,17 +71,17 @@ class RTFormer(nn.Layer):
         super().__init__()
         self.base_channels = base_channels
         base_chs = base_channels
-
+        self.lr_mult = lr_mult
         self.conv1 = nn.Sequential(
-            nn.Conv2D(
+            nn.Conv2d(
                 input_channels, base_chs, kernel_size=3, stride=2, padding=1),
             bn2d(base_chs),
-            nn.ReLU(),
-            nn.Conv2D(
+            nn.ReLU(inplace=False),
+            nn.Conv2d(
                 base_chs, base_chs, kernel_size=3, stride=2, padding=1),
             bn2d(base_chs),
-            nn.ReLU(), )
-        self.relu = nn.ReLU()
+            nn.ReLU(inplace=False), )
+        self.relu = nn.ReLU(inplace=False)
 
         self.layer1 = self._make_layer(BasicBlock, base_chs, base_chs,
                                        layer_nums[0])
@@ -91,7 +93,7 @@ class RTFormer(nn.Layer):
                                         1)
         self.compression3 = nn.Sequential(
             bn2d(base_chs * 4),
-            nn.ReLU(),
+            nn.ReLU(inplace=False),
             conv2d(
                 base_chs * 4, base_chs * 2, kernel_size=1), )
         self.layer4 = EABlock(
@@ -129,14 +131,14 @@ class RTFormer(nn.Layer):
         if isinstance(m, nn.Linear):
             trunc_normal_init(m.weight, std=.02)
             if m.bias is not None:
-                constant_init(m.bias, value=0)
-        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2D)):
-            constant_init(m.weight, value=1.0)
-            constant_init(m.bias, value=0)
-        elif isinstance(m, nn.Conv2D):
+                constant_init(m.bias, val=0)
+        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2d)):
+            constant_init(m.weight, val=1.0)
+            constant_init(m.bias, val=0)
+        elif isinstance(m, nn.Conv2d):
             kaiming_normal_init(m.weight)
             if m.bias is not None:
-                constant_init(m.bias, value=0)
+                constant_init(m.bias, val=0)
 
     def init_weight(self):
         self.conv1.apply(self._init_weights_kaiming)
@@ -161,8 +163,7 @@ class RTFormer(nn.Layer):
                     in_channels, out_channels, kernel_size=1, stride=stride),
                 bn2d(out_channels))
 
-        layers = []
-        layers.append(block(in_channels, out_channels, stride, downsample))
+        layers = [block(in_channels, out_channels, stride, downsample)]
         for i in range(1, blocks):
             if i == (blocks - 1):
                 layers.append(
@@ -176,12 +177,11 @@ class RTFormer(nn.Layer):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        x = paddle.Tensor(x.cpu().numpy())
         x1 = self.layer1(self.conv1(x))  # c, 1/4
         x2 = self.layer2(self.relu(x1))  # 2c, 1/8
         x3 = self.layer3(self.relu(x2))  # 4c, 1/16
         x3_ = x2 + F.interpolate(
-            self.compression3(x3), size=paddle.shape(x2)[2:], mode='bilinear')
+            self.compression3(x3), size=x2.shape[2:], mode='bilinear')
         x3_ = self.layer3_(self.relu(x3_))  # 2c, 1/8
 
         x4_, x4 = self.layer4(
@@ -191,30 +191,36 @@ class RTFormer(nn.Layer):
 
         x6 = self.spp(x5)
         x6 = F.interpolate(
-            x6, size=paddle.shape(x5_)[2:], mode='bilinear')  # 2c, 1/8
-        x_out = self.seghead(paddle.concat([x5_, x6], axis=1))  # 4c, 1/8
+            x6, size=x5_.shape[2:], mode='bilinear')  # 2c, 1/8
+        x_out = self.seghead(torch.concat([x5_, x6], dim=1))  # 4c, 1/8
         logit_list = [x_out]
 
-        if self.training and self.use_aux_head:
+        if self.use_aux_head:
             x_out_extra = self.seghead_extra(x3_)
             logit_list.append(x_out_extra)
 
         logit_list = [
             F.interpolate(
                 logit,
-                paddle.shape(x)[2:],
+                x.shape[2:],
                 mode='bilinear',
                 align_corners=False) for logit in logit_list
         ]
+        if self.use_aux_head:
+            main_out, extra_out = logit_list
+            return ComposedOutput(main_out, {'aux': extra_out})
+        return logit_list[0]
 
-        return logit_list
-    
-    def to(self, device=None, dtype=None, blocking=None):
-        device = "gpu" if device == 'cuda' else device
-        return super().to(device, dtype, blocking)
-
-    def named_modules(self):
-        return self.named_parameters()
+    # def initialize_param_groups(self, lr, training_params):
+    #     def filter_module(param, module_name):
+    #         return param[0].split('.')[0] == module_name
+    #     spp_params = [{'named_params': list(filter(lambda x: filter_module(x, "spp"), list(self.named_parameters()))), 'lr': lr*self.lr_mult}]
+    #     seghead_params = [{'named_params': list(filter(lambda x: filter_module(x, "seghead"), list(self.named_parameters()))), 'lr': lr*self.lr_mult}]
+    #     seghead_extra_params = [{'named_params': list(filter(lambda x: filter_module(x, "seghead_extra"), list(self.named_parameters()))), 'lr': lr*self.lr_mult}]
+    #     def filter_remaining(x):
+    #         return not filter_module(x, "spp") and not filter_module(x, "seghead") and not filter_module(x, "seghead_extra")
+    #     remaining = [{'named_params': list(filter(filter_remaining, list(self.named_parameters())))}]
+    #     return [*spp_params, *seghead_params, *seghead_extra_params, *remaining]
 
 
 def conv2d(in_channels,
@@ -223,35 +229,26 @@ def conv2d(in_channels,
            stride=1,
            padding=0,
            bias_attr=False,
-           lr_mult=1.0,
            **kwargs):
     assert bias_attr in [True, False], "bias_attr should be True or False"
-    weight_attr = paddle.ParamAttr(learning_rate=lr_mult)
-    if bias_attr:
-        bias_attr = paddle.ParamAttr(learning_rate=lr_mult)
-    return nn.Conv2D(
+    return nn.Conv2d(
         in_channels,
         out_channels,
         kernel_size,
         stride,
         padding,
-        weight_attr=weight_attr,
-        bias_attr=bias_attr,
         **kwargs)
 
 
-def bn2d(in_channels, bn_mom=0.1, lr_mult=1.0, **kwargs):
+def bn2d(in_channels, bn_mom=0.1, **kwargs):
     assert 'bias_attr' not in kwargs, "bias_attr must not in kwargs"
-    param_attr = paddle.ParamAttr(learning_rate=lr_mult)
-    return nn.BatchNorm2D(
+    return nn.BatchNorm2d(
         in_channels,
         momentum=bn_mom,
-        weight_attr=param_attr,
-        bias_attr=param_attr,
         **kwargs)
 
 
-class BasicBlock(nn.Layer):
+class BasicBlock(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -261,7 +258,7 @@ class BasicBlock(nn.Layer):
         super().__init__()
         self.conv1 = conv2d(in_channels, out_channels, 3, stride, 1)
         self.bn1 = bn2d(out_channels)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=False)
         self.conv2 = conv2d(out_channels, out_channels, 3, 1, 1)
         self.bn2 = bn2d(out_channels)
         self.downsample = downsample
@@ -284,7 +281,7 @@ class BasicBlock(nn.Layer):
         return out if self.no_relu else self.relu(out)
 
 
-class MLP(nn.Layer):
+class MLP(nn.Module):
     def __init__(self,
                  in_channels,
                  hidden_channels=None,
@@ -293,10 +290,10 @@ class MLP(nn.Layer):
         super().__init__()
         hidden_channels = hidden_channels or in_channels
         out_channels = out_channels or in_channels
-        self.norm = bn2d(in_channels, epsilon=1e-06)
-        self.conv1 = nn.Conv2D(in_channels, hidden_channels, 3, 1, 1)
+        self.norm = bn2d(in_channels, eps=1e-06)
+        self.conv1 = nn.Conv2d(in_channels, hidden_channels, 3, 1, 1)
         self.act = nn.GELU()
-        self.conv2 = nn.Conv2D(hidden_channels, out_channels, 3, 1, 1)
+        self.conv2 = nn.Conv2d(hidden_channels, out_channels, 3, 1, 1)
         self.drop = nn.Dropout(drop_rate)
 
         self.apply(self._init_weights)
@@ -305,14 +302,14 @@ class MLP(nn.Layer):
         if isinstance(m, nn.Linear):
             trunc_normal_init(m.weight, std=.02)
             if m.bias is not None:
-                constant_init(m.bias, value=0)
-        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2D)):
-            constant_init(m.weight, value=1.0)
-            constant_init(m.bias, value=0)
-        elif isinstance(m, nn.Conv2D):
+                constant_init(m.bias, val=0)
+        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2d)):
+            constant_init(m.weight, val=1.0)
+            constant_init(m.bias, val=0)
+        elif isinstance(m, nn.Conv2d):
             kaiming_normal_init(m.weight)
             if m.bias is not None:
-                constant_init(m.bias, value=0)
+                constant_init(m.bias, val=0)
 
     def forward(self, x):
         x = self.norm(x)
@@ -324,9 +321,9 @@ class MLP(nn.Layer):
         return x
 
 
-class ExternalAttention(nn.Layer):
+class ExternalAttention(nn.Module):
     """
-    The ExternalAttention implementation based on PaddlePaddle.
+    The ExternalAttention implementation based on torch.
     Args:
         in_channels (int, optional): The input channels.
         inter_channels (int, optional): The channels of intermediate feature.
@@ -342,8 +339,9 @@ class ExternalAttention(nn.Layer):
                  num_heads=8,
                  use_cross_kv=False):
         super().__init__()
-        assert out_channels % num_heads == 0, \
-            "out_channels ({}) should be be a multiple of num_heads ({})".format(out_channels, num_heads)
+        assert (
+            out_channels % num_heads == 0
+        ), f"out_channels ({out_channels}) should be be a multiple of num_heads ({num_heads})"
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.inter_channels = inter_channels
@@ -355,12 +353,10 @@ class ExternalAttention(nn.Layer):
         if use_cross_kv:
             assert self.same_in_out_chs, "in_channels is not equal to out_channels when use_cross_kv is True"
         else:
-            self.k = self.create_parameter(
-                shape=(inter_channels, in_channels, 1, 1),
-                default_initializer=paddle.nn.initializer.Normal(std=0.001))
-            self.v = self.create_parameter(
-                shape=(out_channels, inter_channels, 1, 1),
-                default_initializer=paddle.nn.initializer.Normal(std=0.001))
+            self.k = nn.Parameter(
+                data=nn.init.trunc_normal_(torch.zeros(inter_channels, in_channels, 1, 1)))
+            self.v = nn.Parameter(
+                data=nn.init.trunc_normal_(torch.zeros(out_channels, inter_channels, 1, 1)))
 
         self.apply(self._init_weights)
 
@@ -368,30 +364,36 @@ class ExternalAttention(nn.Layer):
         if isinstance(m, nn.Linear):
             trunc_normal_init(m.weight, std=.001)
             if m.bias is not None:
-                constant_init(m.bias, value=0.)
-        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2D)):
-            constant_init(m.weight, value=1.)
-            constant_init(m.bias, value=.0)
-        elif isinstance(m, nn.Conv2D):
+                constant_init(m.bias, val=0.)
+        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2d)):
+            constant_init(m.weight, val=1.)
+            constant_init(m.bias, val=.0)
+        elif isinstance(m, nn.Conv2d):
             trunc_normal_init(m.weight, std=.001)
             if m.bias is not None:
-                constant_init(m.bias, value=0.)
+                constant_init(m.bias, val=0.)
 
     def _act_sn(self, x):
-        x = x.reshape([-1, self.inter_channels, 0, 0]) * (self.inter_channels
-                                                          **-0.5)
-        x = F.softmax(x, axis=1)
-        x = x.reshape([1, -1, 0, 0])
+        # x = x.reshape([-1, self.inter_channels, 0, 0]) * (self.inter_channels
+        #                                                   **-0.5)
+        b2 = x.shape[1] // self.inter_channels
+        x = rearrange(x, 'b (b2 ch) h w -> (b b2) ch h w', b2=b2, ch=self.inter_channels) * (self.inter_channels ** -0.5)
+        x = F.softmax(x, dim=1)
+        # x = x.reshape([1, -1, 0, 0])
+        x = rearrange(x, '(b b2) ch h w -> b (b2 ch) h w', b2=b2, ch=self.inter_channels)
         return x
 
     def _act_dn(self, x):
-        x_shape = paddle.shape(x)
+        x_shape = x.shape
         h, w = x_shape[2], x_shape[3]
-        x = x.reshape(
-            [0, self.num_heads, self.inter_channels // self.num_heads, -1])
-        x = F.softmax(x, axis=3)
-        x = x / (paddle.sum(x, axis=2, keepdim=True) + 1e-06)
-        x = x.reshape([0, self.inter_channels, h, w])
+        ch_per_head = self.inter_channels // self.num_heads
+        x = rearrange(x, 'b (heads ch) h w -> b heads ch (h w)', h=h, w=w, heads=self.num_heads, ch=ch_per_head)
+        # x = x.reshape(
+            # [0, self.num_heads, self.inter_channels // self.num_heads, -1])
+        x = F.softmax(x, dim=3)
+        x = x / (torch.sum(x, dim=2, keepdim=True) + 1e-06)
+        # x = x.reshape([0, self.inter_channels, h, w])
+        x = rearrange(x, 'b heads ch (h w) -> b (heads ch) h w', h=h, w=w, heads=self.num_heads, ch=ch_per_head)
         return x
 
     def forward(self, x, cross_k=None, cross_v=None):
@@ -407,19 +409,22 @@ class ExternalAttention(nn.Layer):
                 x,
                 self.k,
                 bias=None,
-                stride=2 if not self.same_in_out_chs else 1,
-                padding=0)  # n,c_in,h,w -> n,c_inter,h,w
+                stride=1 if self.same_in_out_chs else 2,
+                padding=0,
+            )
             x = self._act_dn(x)  # n,c_inter,h,w
             x = F.conv2d(
                 x, self.v, bias=None, stride=1,
                 padding=0)  # n,c_inter,h,w -> n,c_out,h,w
         else:
             assert (cross_k is not None) and (cross_v is not None), \
-                "cross_k and cross_v should no be None when use_cross_kv"
+                    "cross_k and cross_v should no be None when use_cross_kv"
             B = x.shape[0]
-            assert B > 0, "The first dim of x ({}) should be greater than 0, please set input_shape for export.py".format(
-                B)
-            x = x.reshape([1, -1, 0, 0])  # n,c_in,h,w -> 1,n*c_in,h,w
+            assert (
+                B > 0
+            ), f"The first dim of x ({B}) should be greater than 0, please set input_shape for export.py"
+            # x = x.reshape([1, -1, 0, 0])  # n,c_in,h,w -> 1,n*c_in,h,w
+            x = rearrange(x, 'b c h w -> 1 (b c) h w')
             x = F.conv2d(
                 x, cross_k, bias=None, stride=1, padding=0,
                 groups=B)  # 1,n*c_in,h,w -> 1,n*144,h,w  (group=B)
@@ -427,14 +432,15 @@ class ExternalAttention(nn.Layer):
             x = F.conv2d(
                 x, cross_v, bias=None, stride=1, padding=0,
                 groups=B)  # 1,n*144,h,w -> 1, n*c_in,h,w  (group=B)
-            x = x.reshape([-1, self.in_channels, 0,
-                           0])  # 1, n*c_in,h,w -> n,c_in,h,w  (c_in = c_out)
+            # x = x.reshape([-1, self.in_channels, 0,
+            #                0])  # 1, n*c_in,h,w -> n,c_in,h,w  (c_in = c_out)
+            x = rearrange(x, '1 (b c) h w -> b c h w', b=B, c=self.in_channels)
         return x
 
 
-class EABlock(nn.Layer):
+class EABlock(nn.Module):
     """
-    The EABlock implementation based on PaddlePaddle.
+    The EABlock implementation based on torch.
     Args:
         in_channels (int, optional): The input channels.
         out_channels (int, optional): The output channels.
@@ -483,7 +489,7 @@ class EABlock(nn.Layer):
         # compression
         self.compression = nn.Sequential(
             bn2d(out_channels_l),
-            nn.ReLU(),
+            nn.ReLU(inplace=False),
             conv2d(
                 out_channels_l, out_channels_h, kernel_size=1))
         self.compression.apply(self._init_weights_kaiming)
@@ -499,7 +505,7 @@ class EABlock(nn.Layer):
         if use_cross_kv:
             self.cross_kv = nn.Sequential(
                 bn2d(out_channels_l),
-                nn.AdaptiveMaxPool2D(output_size=(self.cross_size,
+                nn.AdaptiveMaxPool2d(output_size=(self.cross_size,
                                                   self.cross_size)),
                 conv2d(out_channels_l, 2 * out_channels_h, 1, 1, 0))
             self.cross_kv.apply(self._init_weights)
@@ -508,7 +514,7 @@ class EABlock(nn.Layer):
         if use_injection:
             self.down = nn.Sequential(
                 bn2d(out_channels_h),
-                nn.ReLU(),
+                nn.ReLU(inplace=False),
                 conv2d(
                     out_channels_h,
                     out_channels_l // 2,
@@ -516,7 +522,7 @@ class EABlock(nn.Layer):
                     stride=2,
                     padding=1),
                 bn2d(out_channels_l // 2),
-                nn.ReLU(),
+                nn.ReLU(inplace=False),
                 conv2d(
                     out_channels_l // 2,
                     out_channels_l,
@@ -529,27 +535,27 @@ class EABlock(nn.Layer):
         if isinstance(m, nn.Linear):
             trunc_normal_init(m.weight, std=.02)
             if m.bias is not None:
-                constant_init(m.bias, value=0)
-        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2D)):
-            constant_init(m.weight, value=1.0)
-            constant_init(m.bias, value=0)
-        elif isinstance(m, nn.Conv2D):
+                constant_init(m.bias, val=0)
+        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2d)):
+            constant_init(m.weight, val=1.0)
+            constant_init(m.bias, val=0)
+        elif isinstance(m, nn.Conv2d):
             trunc_normal_init(m.weight, std=.02)
             if m.bias is not None:
-                constant_init(m.bias, value=0)
+                constant_init(m.bias, val=0)
 
     def _init_weights_kaiming(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_init(m.weight, std=.02)
             if m.bias is not None:
-                constant_init(m.bias, value=0)
-        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2D)):
-            constant_init(m.weight, value=1.0)
-            constant_init(m.bias, value=0)
-        elif isinstance(m, nn.Conv2D):
+                constant_init(m.bias, val=0)
+        elif isinstance(m, (nn.SyncBatchNorm, nn.BatchNorm2d)):
+            constant_init(m.weight, val=1.0)
+            constant_init(m.bias, val=0)
+        elif isinstance(m, nn.Conv2d):
             kaiming_normal_init(m.weight)
             if m.bias is not None:
-                constant_init(m.bias, value=0)
+                constant_init(m.bias, val=0)
 
     def forward(self, x):
         x_h, x_l = x
@@ -560,7 +566,7 @@ class EABlock(nn.Layer):
         x_l = x_l + self.drop_path(self.mlp_l(x_l))  # n,out_chs_l,h,w 
 
         # compression
-        x_h_shape = paddle.shape(x_h)[2:]
+        x_h_shape = x_h.shape[2:]
         x_l_cp = self.compression(x_l)
         x_h += F.interpolate(x_l_cp, size=x_h_shape, mode='bilinear')
 
@@ -569,8 +575,8 @@ class EABlock(nn.Layer):
             x_h = x_h + self.drop_path(self.attn_h(x_h))  # n,out_chs_h,h,w
         else:
             cross_kv = self.cross_kv(x_l)  # n,2*out_channels_h,12,12
-            cross_k, cross_v = paddle.split(cross_kv, 2, axis=1)
-            cross_k = cross_k.transpose([0, 2, 3, 1]).reshape(
+            cross_k, cross_v = torch.split(cross_kv, self.out_channels_h, dim=1)
+            cross_k = torch.permute(cross_k, [0, 2, 3, 1]).reshape(
                 [-1, self.out_channels_h, 1, 1])  # n*144,out_channels_h,1,1
             cross_v = cross_v.reshape(
                 [-1, self.cross_size * self.cross_size, 1,
@@ -587,107 +593,102 @@ class EABlock(nn.Layer):
         return x_h, x_l
 
 
-class DAPPM(nn.Layer):
+class DAPPM(nn.Module):
     def __init__(self, in_channels, inter_channels, out_channels, lr_mult):
         super().__init__()
+        self.lr_mult = lr_mult
         self.scale1 = nn.Sequential(
-            nn.AvgPool2D(
-                kernel_size=5, stride=2, padding=2, exclusive=False),
+            nn.AvgPool2d(
+                kernel_size=5, stride=2, padding=2, count_include_pad=False),
             bn2d(
-                in_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                in_channels),
+            nn.ReLU(inplace=False),
             conv2d(
-                in_channels, inter_channels, kernel_size=1, lr_mult=lr_mult))
+                in_channels, inter_channels, kernel_size=1))
         self.scale2 = nn.Sequential(
-            nn.AvgPool2D(
-                kernel_size=9, stride=4, padding=4, exclusive=False),
+            nn.AvgPool2d(
+                kernel_size=9, stride=4, padding=4, count_include_pad=False),
             bn2d(
-                in_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                in_channels),
+            nn.ReLU(inplace=False),
             conv2d(
-                in_channels, inter_channels, kernel_size=1, lr_mult=lr_mult))
+                in_channels, inter_channels, kernel_size=1))
         self.scale3 = nn.Sequential(
-            nn.AvgPool2D(
-                kernel_size=17, stride=8, padding=8, exclusive=False),
+            nn.AvgPool2d(
+                kernel_size=17, stride=8, padding=8, count_include_pad=False),
             bn2d(
-                in_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                in_channels),
+            nn.ReLU(inplace=False),
             conv2d(
-                in_channels, inter_channels, kernel_size=1, lr_mult=lr_mult))
+                in_channels, inter_channels, kernel_size=1))
         self.scale4 = nn.Sequential(
-            nn.AdaptiveAvgPool2D((1, 1)),
+            nn.AdaptiveAvgPool2d((1, 1)),
             bn2d(
-                in_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                in_channels),
+            nn.ReLU(inplace=False),
             conv2d(
-                in_channels, inter_channels, kernel_size=1, lr_mult=lr_mult))
+                in_channels, inter_channels, kernel_size=1))
         self.scale0 = nn.Sequential(
             bn2d(
-                in_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                in_channels),
+            nn.ReLU(inplace=False),
             conv2d(
-                in_channels, inter_channels, kernel_size=1, lr_mult=lr_mult))
+                in_channels, inter_channels, kernel_size=1))
         self.process1 = nn.Sequential(
             bn2d(
-                inter_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                inter_channels),
+            nn.ReLU(inplace=False),
             conv2d(
                 inter_channels,
                 inter_channels,
                 kernel_size=3,
-                padding=1,
-                lr_mult=lr_mult))
+                padding=1))
         self.process2 = nn.Sequential(
             bn2d(
-                inter_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                inter_channels),
+            nn.ReLU(inplace=False),
             conv2d(
                 inter_channels,
                 inter_channels,
                 kernel_size=3,
-                padding=1,
-                lr_mult=lr_mult))
+                padding=1))
         self.process3 = nn.Sequential(
             bn2d(
-                inter_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                inter_channels),
+            nn.ReLU(inplace=False),
             conv2d(
                 inter_channels,
                 inter_channels,
                 kernel_size=3,
-                padding=1,
-                lr_mult=lr_mult))
+                padding=1))
         self.process4 = nn.Sequential(
             bn2d(
-                inter_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                inter_channels),
+            nn.ReLU(inplace=False),
             conv2d(
                 inter_channels,
                 inter_channels,
                 kernel_size=3,
-                padding=1,
-                lr_mult=lr_mult))
+                padding=1))
         self.compression = nn.Sequential(
             bn2d(
-                inter_channels * 5, lr_mult=lr_mult),
-            nn.ReLU(),
+                inter_channels * 5),
+            nn.ReLU(inplace=False),
             conv2d(
                 inter_channels * 5,
                 out_channels,
-                kernel_size=1,
-                lr_mult=lr_mult))
+                kernel_size=1))
         self.shortcut = nn.Sequential(
             bn2d(
-                in_channels, lr_mult=lr_mult),
-            nn.ReLU(),
+                in_channels),
+            nn.ReLU(inplace=False),
             conv2d(
-                in_channels, out_channels, kernel_size=1, lr_mult=lr_mult))
+                in_channels, out_channels, kernel_size=1))
 
     def forward(self, x):
-        x_shape = paddle.shape(x)[2:]
-        x_list = []
+        x_shape = x.shape[2:]
+        x_list = [self.scale0(x)]
 
-        x_list.append(self.scale0(x))
         x_list.append(
             self.process1((F.interpolate(
                 self.scale1(x), size=x_shape, mode='bilinear') + x_list[0])))
@@ -700,31 +701,28 @@ class DAPPM(nn.Layer):
             self.process4((F.interpolate(
                 self.scale4(x), size=x_shape, mode='bilinear') + x_list[3])))
 
-        out = self.compression(paddle.concat(x_list, axis=1)) + self.shortcut(x)
-        return out
+        return self.compression(torch.concat(x_list, dim=1)) + self.shortcut(x)
 
 
-class SegHead(nn.Layer):
+class SegHead(nn.Module):
     def __init__(self, in_channels, inter_channels, out_channels, lr_mult):
         super().__init__()
-        self.bn1 = bn2d(in_channels, lr_mult=lr_mult)
+        self.lr_mult = lr_mult
+        self.bn1 = bn2d(in_channels)
         self.conv1 = conv2d(
             in_channels,
             inter_channels,
             kernel_size=3,
-            padding=1,
-            lr_mult=lr_mult)
-        self.bn2 = bn2d(inter_channels, lr_mult=lr_mult)
-        self.relu = nn.ReLU()
+            padding=1)
+        self.bn2 = bn2d(inter_channels)
+        self.relu = nn.ReLU(inplace=False)
         self.conv2 = conv2d(
             inter_channels,
             out_channels,
             kernel_size=1,
             padding=0,
-            bias_attr=True,
-            lr_mult=lr_mult)
+            bias_attr=True)
 
     def forward(self, x):
         x = self.conv1(self.relu(self.bn1(x)))
-        out = self.conv2(self.relu(self.bn2(x)))
-        return out
+        return self.conv2(self.relu(self.bn2(x)))

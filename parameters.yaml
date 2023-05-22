@@ -1,6 +1,11 @@
 experiment:
+<<<<<<< Updated upstream
   name: WDSE
   group: KD/TeacherAdaptiveLoss/optim
+=======
+  name: test/CamVid
+  group: optim/RTFormer
+>>>>>>> Stashed changes
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -8,32 +13,42 @@ experiment:
   tracking_dir: experiments
   entity: null
   excluded_files: "*.pth"
+<<<<<<< Updated upstream
   search: optim
   n_trials: 10
   direction: max
+=======
+  search: optim # search method to use (optim or grid)
+  direction: max # direction of the search (max or min)
+  n_trials: 10 # number of trials to run
+>>>>>>> Stashed changes
 
 parameters:
   tags: [[]]
   # train, test, inference
   # phases: [[run]]
   phases: [[train, test]]
-  dataset_interface: [wd/data/WeedMapDatasetInterface]
+  dataset_interface: [wd/data/CamVidDatasetInterface]
 
   train_params:
+<<<<<<< Updated upstream
     max_epochs: [500]
     initial_lr: [0.0001]
+=======
+    max_epochs: [5000]
+    initial_lr: [0.0001, 0.01]
+>>>>>>> Stashed changes
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
     loss:
-      name: [wd/loss/loss/RMILoss]
+      name: [focal]
       params:
-        num_classes: [3]
-    # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [True]
+<<<<<<< Updated upstream
     metric_to_watch: [f1]
     early_stopping_patience: [25]
     freeze_pretrained: [True]
@@ -42,12 +57,33 @@ parameters:
   train_metrics:
     f1: &metric_params
       num_classes: &num_classes [3]
+=======
+    metric_to_watch: [JaccardIndex]
+
+  early_stopping:
+    check_finite: [False]
+    patience: [50]
+    mode: [max]
+
+  aux_loss:
+      name: [auxiliary_loss]
+      params:
+        aux_loss_coeff: [0.2, 0.5]
+        aux_loss: 
+          name: [focal]
+          params:
+
+  train_metrics:
+    f1: &metric_params
+      num_classes: &num_classes [32]
+>>>>>>> Stashed changes
   test_metrics:
     jaccard: *metric_params
     conf_mat: *metric_params
     f1: *metric_params
     precision: *metric_params
     recall: *metric_params
+<<<<<<< Updated upstream
 
   kd:
     module:
@@ -89,6 +125,24 @@ parameters:
     return_path: [True]
     size: [same]
     crop_size: [same]
+=======
+
+  model:
+    name: [wd/models/rtformer/RTFormer]
+    params:
+    
+  dataset:
+    root: ["dataset/CamVid"]
+    train_loader_drop_last: [True]
+    channels: [['R', 'G', 'B']]
+    num_classes: [32]
+    batch_size: [2]
+    val_batch_size: [4]
+    test_batch_size: [4]
+    num_workers: [0]
+    size: [[360, 480]]
+    return_name: [True]
+>>>>>>> Stashed changes
 
   test_callbacks:
     PerExampleMetricCallback:
@@ -96,8 +150,15 @@ parameters:
     SegmentationVisualizationCallback:
   val_callbacks: 
     SegmentationVisualizationCallback: 
+<<<<<<< Updated upstream
       batch_idxs: [[4]]
 
 
 other_grids:
 
+=======
+      batch_idxs: [[4, 32]]
+
+
+other_grids:
+>>>>>>> Stashed changes
