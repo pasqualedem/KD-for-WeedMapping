@@ -1,13 +1,16 @@
 experiment:
   name: WDSE
-  group: KD/TeacherAdaptiveLoss
+  group: KD/TeacherAdaptiveLoss/optim
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
   logger: clearml
-  tracking_dir: null
+  tracking_dir: experiments
   entity: null
   excluded_files: "*.pth"
+  search: optim
+  n_trials: 10
+  direction: max
 
 parameters:
   tags: [[]]
@@ -62,9 +65,9 @@ parameters:
       name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
       params:
         distillation_loss:
-          name: [vis_kldiv_loss, MSELoss]
+          name: [MSELoss]
         momentum: [0.0, 0.9]
-        N: [0.1, 0.2, 0.3]
+        N: [0.1, 0.5]
 
   model:
     name: [lawin]
