@@ -1,5 +1,5 @@
-import paddle.nn as nn
-import paddle
+import torch.nn as nn
+import torch
 
 
 def drop_path(x, drop_prob=0., training=False):
@@ -9,15 +9,14 @@ def drop_path(x, drop_prob=0., training=False):
     """
     if drop_prob == 0. or not training:
         return x
-    keep_prob = paddle.to_tensor(1 - drop_prob, dtype=x.dtype)
-    shape = (paddle.shape(x)[0], ) + (1, ) * (x.ndim - 1)
-    random_tensor = keep_prob + paddle.rand(shape).astype(x.dtype)
-    random_tensor = paddle.floor(random_tensor)  # binarize
-    output = x.divide(keep_prob) * random_tensor
-    return output
+    keep_prob = torch.tensor(1 - drop_prob, dtype=x.dtype, device=x.device)
+    shape = (x.shape[0], ) + (1, ) * (x.ndim - 1)
+    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    random_tensor = torch.floor(random_tensor)  # binarize
+    return x.divide(keep_prob) * random_tensor
 
 
-class DropPath(nn.Layer):
+class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
     """
 
@@ -29,7 +28,7 @@ class DropPath(nn.Layer):
         return drop_path(x, self.drop_prob, self.training)
 
 
-class Identity(nn.Layer):
+class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2020 PaddlePaddle Authors. All Rights Reserved.
+# Copyright (c) 2020 Torch Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ from urllib.parse import urlparse, unquote
 
 import yaml
 import numpy as np
-import paddle
+import torch
 
 
 from wd.utils.download import download_file_and_uncompress
@@ -86,7 +86,7 @@ def load_pretrained_model(model, pretrained_model):
             pretrained_model = download_pretrained_model(pretrained_model)
 
         if os.path.exists(pretrained_model):
-            para_state_dict = paddle.load(pretrained_model)
+            para_state_dict = torch.load(pretrained_model)
 
             model_state_dict = model.state_dict()
             keys = model_state_dict.keys()
@@ -123,9 +123,9 @@ def resume(model, optimizer, resume_model):
         if os.path.exists(resume_model):
             resume_model = os.path.normpath(resume_model)
             ckpt_path = os.path.join(resume_model, 'model.pdparams')
-            para_state_dict = paddle.load(ckpt_path)
+            para_state_dict = torch.load(ckpt_path)
             ckpt_path = os.path.join(resume_model, 'model.pdopt')
-            opti_state_dict = paddle.load(ckpt_path)
+            opti_state_dict = torch.load(ckpt_path)
             model.set_state_dict(para_state_dict)
             optimizer.set_state_dict(opti_state_dict)
 

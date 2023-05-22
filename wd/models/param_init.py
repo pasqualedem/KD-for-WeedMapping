@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import paddle.nn as nn
+import torch.nn as nn
 import math
 
 
@@ -34,8 +34,7 @@ def uniform_init(param, **kwargs):
         # result is [-0.2734719   0.23939109]
 
     """
-    initializer = nn.initializer.Uniform(**kwargs)
-    initializer(param, param.block)
+    nn.init.uniform(param, **kwargs)
 
 
 def constant_init(param, **kwargs):
@@ -56,8 +55,7 @@ def constant_init(param, **kwargs):
         # result is [[2. 2. 2. 2.], [2. 2. 2. 2.]]
 
     """
-    initializer = nn.initializer.Constant(**kwargs)
-    initializer(param, param.block)
+    nn.init.constant(param, **kwargs)
 
 
 def normal_init(param, **kwargs):
@@ -76,8 +74,7 @@ def normal_init(param, **kwargs):
         param_init.normal_init(linear.weight, loc=0.0, scale=1.0)
 
     """
-    initializer = nn.initializer.Normal(**kwargs)
-    initializer(param, param.block)
+    nn.init.normal(param, **kwargs)
 
 
 def kaiming_normal_init(param, **kwargs):
@@ -110,8 +107,7 @@ def kaiming_normal_init(param, **kwargs):
         param_init.kaiming_normal_init(linear.weight)
 
     """
-    initializer = nn.initializer.KaimingNormal(**kwargs)
-    initializer(param, param.block)
+    nn.init.kaiming_normal(param, **kwargs)
 
 
 def trunc_normal_init(param, **kwargs):
@@ -130,8 +126,7 @@ def trunc_normal_init(param, **kwargs):
         param_init.trunc_normal_init(linear.weight, mean=0.0, std=0.02)
 
     """
-    initializer = nn.initializer.TruncatedNormal(**kwargs)
-    initializer(param, param.block)
+    nn.init.trunc_normal_(param, **kwargs)
 
 
 def kaiming_uniform(param, **kwargs):
@@ -159,8 +154,7 @@ def kaiming_uniform(param, **kwargs):
         param_init.kaiming_uniform(linear.weight)
     """
 
-    initializer = nn.initializer.KaimingUniform(**kwargs)
-    initializer(param, param.block)
+    nn.init.kaiming_uniform(param, **kwargs)
 
 
 def xavier_uniform(param, **kwargs):
@@ -185,8 +179,7 @@ def xavier_uniform(param, **kwargs):
         linear = nn.Linear(2, 4)
         param_init.xavier_uniform(linear.weight)
     """
-    initializer = nn.initializer.XavierUniform(**kwargs)
-    initializer(param, param.block)
+    nn.init.xavier_uniform(param, **kwargs)
 
 
 def multihead_fill(layer, qkv_same_embed_dim=True):
@@ -204,7 +197,7 @@ def multihead_fill(layer, qkv_same_embed_dim=True):
 
     def _init_param_as_combined_linear_weight(p):
         bound = math.sqrt(6 / (3 * p.shape[0] + p.shape[1]))
-        nn.initializer.Uniform(low=-bound, high=bound)(p)
+        nn.init.uniform(p, low=-bound, high=bound)
 
     if qkv_same_embed_dim:
         _init_param_as_combined_linear_weight(layer.q_proj.weight)
@@ -228,10 +221,10 @@ def th_linear_fill(layer):
         linear = nn.Linear(128, 128)
         param_init.linear_fill(linear)
     """
-    nn.initializer.KaimingUniform(
-        negative_slope=math.sqrt(5), nonlinearity='leaky_relu')(layer.weight)
+    nn.init.kaiming_uniform(layer.weight,
+        negative_slope=math.sqrt(5), nonlinearity='leaky_relu')()
 
     if getattr(layer, 'bias', None) is not None:
         fan_in = layer.weight.shape[0]
         bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-        nn.initializer.Uniform(low=-bound, high=bound)(layer.bias)
+        nn.init.uniform(layer.bias, low=-bound, high=bound)
