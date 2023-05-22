@@ -1,6 +1,6 @@
 experiment:
   name: WDSE
-  group: KD/Continuation
+  group: KD/TeacherAdaptiveLoss
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -17,7 +17,7 @@ parameters:
   dataset_interface: [wd/data/WeedMapDatasetInterface]
 
   train_params:
-    max_epochs: [50]
+    max_epochs: [500]
     initial_lr: [0.0001]
     optimizer: [Adam]
     optimizer_params:
@@ -26,7 +26,6 @@ parameters:
       name: [wd/loss/loss/RMILoss]
       params:
         num_classes: [3]
-        weight: [null, [0.0273, 1.0, 4.3802]]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
@@ -35,7 +34,7 @@ parameters:
     metric_to_watch: [f1]
     early_stopping_patience: [25]
     freeze_pretrained: [True]
-    pass_context_to_loss: [True]
+    inform_loss_in_validaiton: [True]
 
   train_metrics:
     f1: &metric_params
@@ -58,12 +57,14 @@ parameters:
         pretrained: [magic-americanshorthair-11]
         side_pretrained: ['G']
         aux_output: [False]
+
     loss:
-      name: [wd/loss/loss/ContinuationLoss]
+      name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
       params:
-        max_epochs: [50, 100, 150]
-        max_temperature: [9.0]
-        margin: [5.0]
+        distillation_loss:
+          name: [vis_kldiv_loss, MSELoss]
+        momentum: [0.0, 0.9]
+        N: [0.1, 0.2, 0.3]
 
   model:
     name: [lawin]

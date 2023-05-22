@@ -534,3 +534,88 @@ class TemperatureAnnealing:
         return phi
 
 
+class ContinuationLoss(ComposedLoss):
+    name = "CL"
+    def __init__(self, task_loss_fn, max_temperature, max_epochs, margin) -> None:
+        super().__init__()
+        self.margin = margin
+        self.max_epochs = max_epochs
+        self.task_loss = task_loss_fn
+        self.phi = TemperatureAnnealing(max_temperature=max_temperature, max_epochs=max_epochs)
+
+    @property
+    def component_names(self):
+        """
+        Component names for logging during training.
+        These correspond to 2nd item in the tuple returned in self.forward(...).
+        See super_gradients.Trainer.train() docs for more info.
+        """
+        return [
+            self.name,
+            "phi",
+            "psi",
+            f"TsL:{self.task_loss.__class__.__name__}",
+            f"DL"
+        ]
+    
+    def psi(self, epoch):
+        if epoch is None:
+            return 1
+        return epoch / self.max_epochs if epoch < self.max_epochs else 1
+
+    def forward(self, kd_output, target, context):
+        student = kd_output.student_output
+        teacher = kd_output.teacher_output
+
+        task_loss = self.task_loss(student, target)
+
+        epoch = context.epoch
+        if epoch is None:
+            temperature = 1
+        else:
+            temperature = self.phi(epoch)
+
+        mse_loss = torch.nn.functional.mse_loss(student, teacher*temperature, reduction='mean')
+        KD_anneal_loss = torch.max(torch.tensor(0.0, device=mse_loss.device), mse_loss - self.margin * temperature)
+        psi = self.psi(epoch)
+        KD_continuation_loss = psi * task_loss + (1 - psi) * KD_anneal_loss
+
+        return KD_continuation_loss, torch.cat((
+            KD_continuation_loss.unsqueeze(0), 
+            torch.tensor([temperature], device=task_loss.device), 
+            torch.tensor([psi], device=task_loss.device), 
+            task_loss.unsqueeze(0), 
+            KD_anneal_loss.unsqueeze(0)
+            )).detach()
+
+
+class TeacherContinuationLoss(ContinuationLoss, TeacherAdaptiveDistillationLoss):
+    def __init__(self, task_loss_fn, distillation_loss_fn, max_temperature, margin, **kwargs) -> None:
+        super(ContinuationLoss, self).__init__(task_loss_fn, max_temperature, 0, margin, **kwargs)
+        super(TeacherAdaptiveDistillationLoss, self).__init__(task_loss_fn, distillation_loss_fn, **kwargs)
+
+    def forward(self, kd_output, target, context):
+        student = kd_output.student_output
+        teacher = kd_output.teacher_output
+
+        task_loss = self.task_loss(student, target)
+
+        epoch = context.epoch
+        if epoch is None:
+            temperature = 1
+        else:
+            temperature = self.phi(epoch)
+
+        mse_loss = self.distillation_loss_fn(student, teacher*temperature, reduction='mean')
+        teacher_loss = self.task_loss(teacher, target)
+        KD_anneal_loss = torch.max(torch.tensor(0.0, device=mse_loss.device), mse_loss - self.margin * temperature)
+        psi = self._weight_function(teacher_loss, task_loss)
+        KD_continuation_loss = psi * task_loss + (1 - psi) * KD_anneal_loss
+
+        return KD_continuation_loss, torch.cat((
+            KD_continuation_loss.unsqueeze(0), 
+            torch.tensor([temperature], device=task_loss.device), 
+            torch.tensor([psi], device=task_loss.device), 
+            task_loss.unsqueeze(0), 
+            KD_anneal_loss.unsqueeze(0)
+            )).detach()

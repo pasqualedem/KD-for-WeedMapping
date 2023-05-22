@@ -1,6 +1,6 @@
 experiment:
   name: WDSE
-  group: KD/Continuation
+  group: KD/TAKD
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -17,7 +17,7 @@ parameters:
   dataset_interface: [wd/data/WeedMapDatasetInterface]
 
   train_params:
-    max_epochs: [50]
+    max_epochs: [500]
     initial_lr: [0.0001]
     optimizer: [Adam]
     optimizer_params:
@@ -26,7 +26,6 @@ parameters:
       name: [wd/loss/loss/RMILoss]
       params:
         num_classes: [3]
-        weight: [null, [0.0273, 1.0, 4.3802]]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
@@ -34,8 +33,7 @@ parameters:
     greater_metric_to_watch_is_better: [True]
     metric_to_watch: [f1]
     early_stopping_patience: [25]
-    freeze_pretrained: [True]
-    pass_context_to_loss: [True]
+    freeze_pretrained: [True, False]
 
   train_metrics:
     f1: &metric_params
@@ -58,17 +56,21 @@ parameters:
         pretrained: [magic-americanshorthair-11]
         side_pretrained: ['G']
         aux_output: [False]
+
     loss:
-      name: [wd/loss/loss/ContinuationLoss]
+      name: [kd_logits_loss]
       params:
-        max_epochs: [50, 100, 150]
-        max_temperature: [9.0]
-        margin: [5.0]
+        distillation_loss:
+          name: [vis_kldiv_loss, MSELoss]
+        distillation_loss_coeff: [0.8]
 
   model:
     name: [lawin]
     params:
-      backbone: [MiT-L0]
+      backbone: [MiT-B0]
+      backbone_pretrained: [True]
+      main_channels: [4]
+      main_pretrained: [['R', 'G', 'G', 'G']]
 
   dataset:
     root: ["dataset/4_rotations_processed_006_test/Sequoia"]
@@ -96,4 +98,3 @@ parameters:
 
 
 other_grids:
-

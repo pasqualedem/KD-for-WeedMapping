@@ -1,6 +1,6 @@
 experiment:
   name: WDSE
-  group: KD/Continuation
+  group: KD/Annealing
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -23,17 +23,16 @@ parameters:
     optimizer_params:
       weight_decay: [0]
     loss:
-      name: [wd/loss/loss/RMILoss]
+      name: [wd/loss/loss/AnnealingLoss]
       params:
-        num_classes: [3]
-        weight: [null, [0.0273, 1.0, 4.3802]]
+        max_epochs: [50]
+        max_temperature: [9.0]
     # ema: True
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [True]
     metric_to_watch: [f1]
-    early_stopping_patience: [25]
     freeze_pretrained: [True]
     pass_context_to_loss: [True]
 
@@ -58,12 +57,6 @@ parameters:
         pretrained: [magic-americanshorthair-11]
         side_pretrained: ['G']
         aux_output: [False]
-    loss:
-      name: [wd/loss/loss/ContinuationLoss]
-      params:
-        max_epochs: [50, 100, 150]
-        max_temperature: [9.0]
-        margin: [5.0]
 
   model:
     name: [lawin]
@@ -96,4 +89,13 @@ parameters:
 
 
 other_grids:
-
+  - train_params:
+      max_epochs: [100]
+      loss:
+        params:
+          max_epochs: [100]
+  - train_params:
+      max_epochs: [150]
+      loss:
+        params:
+          max_epochs: [150]

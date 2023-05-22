@@ -1,5 +1,5 @@
 experiment:
-  name: WDSE
+  name: WDRE
   group: KD/Continuation
   continue_with_errors: False
   start_from_grid: 0
@@ -17,7 +17,7 @@ parameters:
   dataset_interface: [wd/data/WeedMapDatasetInterface]
 
   train_params:
-    max_epochs: [50]
+    max_epochs: [500]
     initial_lr: [0.0001]
     optimizer: [Adam]
     optimizer_params:
@@ -55,7 +55,7 @@ parameters:
     teacher:
       name: [wd/network/ocrnet/HRNet]
       params:
-        pretrained: [magic-americanshorthair-11]
+        pretrained: [mythopoeic-godwit-66]
         side_pretrained: ['G']
         aux_output: [False]
     loss:
@@ -71,12 +71,12 @@ parameters:
       backbone: [MiT-L0]
 
   dataset:
-    root: ["dataset/4_rotations_processed_006_test/Sequoia"]
-    train_folders: [['005', '007']]
-    test_folders: [['006']]
+    root: ["dataset/0_rotations_processed_003_test/RedEdge"]
+    train_folders: [['000', '001', '002', '004']]
+    test_folders: [['003']]
     hor_flip: [True]
     ver_flip: [True]
-    channels: [['R', 'G', 'NIR', 'RE']]
+    channels: [['R', 'G', 'B', 'NIR', 'RE']]
     batch_size: [6]
     val_batch_size: [12]
     test_batch_size: [12]
