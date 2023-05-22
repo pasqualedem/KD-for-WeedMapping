@@ -1,11 +1,6 @@
 experiment:
-<<<<<<< Updated upstream
-  name: WDSE
-  group: KD/TeacherAdaptiveLoss/optim
-=======
   name: test/CamVid
   group: optim/RTFormer
->>>>>>> Stashed changes
   continue_with_errors: False
   start_from_grid: 0
   start_from_run: 0
@@ -13,15 +8,9 @@ experiment:
   tracking_dir: experiments
   entity: null
   excluded_files: "*.pth"
-<<<<<<< Updated upstream
-  search: optim
-  n_trials: 10
-  direction: max
-=======
   search: optim # search method to use (optim or grid)
   direction: max # direction of the search (max or min)
   n_trials: 10 # number of trials to run
->>>>>>> Stashed changes
 
 parameters:
   tags: [[]]
@@ -31,13 +20,8 @@ parameters:
   dataset_interface: [wd/data/CamVidDatasetInterface]
 
   train_params:
-<<<<<<< Updated upstream
-    max_epochs: [500]
-    initial_lr: [0.0001]
-=======
     max_epochs: [5000]
     initial_lr: [0.0001, 0.01]
->>>>>>> Stashed changes
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
@@ -48,16 +32,6 @@ parameters:
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [True]
-<<<<<<< Updated upstream
-    metric_to_watch: [f1]
-    early_stopping_patience: [25]
-    freeze_pretrained: [True]
-    inform_loss_in_validaiton: [True]
-
-  train_metrics:
-    f1: &metric_params
-      num_classes: &num_classes [3]
-=======
     metric_to_watch: [JaccardIndex]
 
   early_stopping:
@@ -76,56 +50,12 @@ parameters:
   train_metrics:
     f1: &metric_params
       num_classes: &num_classes [32]
->>>>>>> Stashed changes
   test_metrics:
     jaccard: *metric_params
     conf_mat: *metric_params
     f1: *metric_params
     precision: *metric_params
     recall: *metric_params
-<<<<<<< Updated upstream
-
-  kd:
-    module:
-      name: [logits_distillation]
-      params:
-
-    teacher:
-      name: [wd/network/ocrnet/HRNet]
-      params:
-        pretrained: [magic-americanshorthair-11]
-        side_pretrained: ['G']
-        aux_output: [False]
-
-    loss:
-      name: [wd/loss/loss/TeacherAdaptiveDistillationLoss]
-      params:
-        distillation_loss:
-          name: [MSELoss]
-        momentum: [0.0, 0.9]
-        N: [0.1, 0.5]
-
-  model:
-    name: [lawin]
-    params:
-      backbone: [MiT-L0]
-
-  dataset:
-    root: ["dataset/4_rotations_processed_006_test/Sequoia"]
-    train_folders: [['005', '007']]
-    test_folders: [['006']]
-    hor_flip: [True]
-    ver_flip: [True]
-    channels: [['R', 'G', 'NIR', 'RE']]
-    batch_size: [6]
-    val_batch_size: [12]
-    test_batch_size: [12]
-    num_workers: [0]
-    num_classes: [3]
-    return_path: [True]
-    size: [same]
-    crop_size: [same]
-=======
 
   model:
     name: [wd/models/rtformer/RTFormer]
@@ -142,7 +72,6 @@ parameters:
     num_workers: [0]
     size: [[360, 480]]
     return_name: [True]
->>>>>>> Stashed changes
 
   test_callbacks:
     PerExampleMetricCallback:
@@ -150,15 +79,7 @@ parameters:
     SegmentationVisualizationCallback:
   val_callbacks: 
     SegmentationVisualizationCallback: 
-<<<<<<< Updated upstream
-      batch_idxs: [[4]]
-
-
-other_grids:
-
-=======
       batch_idxs: [[4, 32]]
 
 
 other_grids:
->>>>>>> Stashed changes
