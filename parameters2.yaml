@@ -1,5 +1,5 @@
 experiment:
-  name: WDSE
+  name: test/WDSE
   group: KD/Continuation
   continue_with_errors: False
   start_from_grid: 0

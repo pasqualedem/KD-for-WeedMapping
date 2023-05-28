@@ -1,5 +1,5 @@
 experiment:
-  name: test/CamVid
+  name: CamVid
   group: optim/RTFormer
   continue_with_errors: False
   start_from_grid: 0
@@ -10,7 +10,7 @@ experiment:
   excluded_files: "*.pth"
   search: optim # search method to use (optim or grid)
   direction: max # direction of the search (max or min)
-  n_trials: 10 # number of trials to run
+  n_trials: 4 # number of trials to run
 
 parameters:
   tags: [[]]
@@ -20,24 +20,21 @@ parameters:
   dataset_interface: [wd/data/CamVidDatasetInterface]
 
   train_params:
-    max_epochs: [5000]
-    initial_lr: [0.0001, 0.01]
+    max_epochs: [500]
+    initial_lr: [0.0001, 0.001]
     optimizer: [Adam]
     optimizer_params:
       weight_decay: [0]
     loss:
       name: [focal]
       params:
+        gamma: [0, 2]
     seed: [42]
     zero_weight_decay_on_bias_and_bn: [True]
     average_best_models: [False]
     greater_metric_to_watch_is_better: [True]
     metric_to_watch: [JaccardIndex]
-
-  early_stopping:
-    check_finite: [False]
-    patience: [50]
-    mode: [max]
+    early_stopping_patience: [50]
 
   aux_loss:
       name: [auxiliary_loss]
@@ -46,6 +43,7 @@ parameters:
         aux_loss: 
           name: [focal]
           params:
+            gamma: [0, 2]
 
   train_metrics:
     f1: &metric_params
@@ -62,7 +60,7 @@ parameters:
     params:
     
   dataset:
-    root: ["dataset/CamVid"]
+    root: ["/ext/datasets/CamVid"]
     train_loader_drop_last: [True]
     channels: [['R', 'G', 'B']]
     num_classes: [32]
@@ -83,3 +81,8 @@ parameters:
 
 
 other_grids:
+  - train_params:
+      scheduler:
+        name: [PolyLR]
+        params:
+          power: [2.0]

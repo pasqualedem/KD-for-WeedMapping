@@ -72,10 +72,8 @@ class CamVidDatasetInterface(DatasetInterface):
             A.Normalize(self.lib_dataset_params['mean'], self.lib_dataset_params['std']),
         ])
         transform = A.Compose([
-            A.CLAHE(),
+            A.ColorJitter(),
             A.HorizontalFlip(),
-            A.RandomBrightnessContrast(),
-            A.GaussianBlur(blur_limit=(1,5)),
             A.Resize(size[0], size[1]),
             A.Normalize(self.lib_dataset_params['mean'], self.lib_dataset_params['std']),
         ])

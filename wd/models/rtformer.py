@@ -81,7 +81,6 @@ class RTFormer(nn.Module):
                 base_chs, base_chs, kernel_size=3, stride=2, padding=1),
             bn2d(base_chs),
             nn.ReLU(inplace=False), )
-        self.relu = nn.ReLU(inplace=False)
 
         self.layer1 = self._make_layer(BasicBlock, base_chs, base_chs,
                                        layer_nums[0])
@@ -178,16 +177,16 @@ class RTFormer(nn.Module):
 
     def forward(self, x):
         x1 = self.layer1(self.conv1(x))  # c, 1/4
-        x2 = self.layer2(self.relu(x1))  # 2c, 1/8
-        x3 = self.layer3(self.relu(x2))  # 4c, 1/16
+        x2 = self.layer2(F.relu(x1))  # 2c, 1/8
+        x3 = self.layer3(F.relu(x2))  # 4c, 1/16
         x3_ = x2 + F.interpolate(
             self.compression3(x3), size=x2.shape[2:], mode='bilinear')
-        x3_ = self.layer3_(self.relu(x3_))  # 2c, 1/8
+        x3_ = self.layer3_(F.relu(x3_))  # 2c, 1/8
 
         x4_, x4 = self.layer4(
-            [self.relu(x3_), self.relu(x3)])  # 2c, 1/8; 8c, 1/16
+            [F.relu(x3_), F.relu(x3)])  # 2c, 1/8; 8c, 1/16
         x5_, x5 = self.layer5(
-            [self.relu(x4_), self.relu(x4)])  # 2c, 1/8; 8c, 1/32
+            [F.relu(x4_), F.relu(x4)])  # 2c, 1/8; 8c, 1/32
 
         x6 = self.spp(x5)
         x6 = F.interpolate(
@@ -258,7 +257,6 @@ class BasicBlock(nn.Module):
         super().__init__()
         self.conv1 = conv2d(in_channels, out_channels, 3, stride, 1)
         self.bn1 = bn2d(out_channels)
-        self.relu = nn.ReLU(inplace=False)
         self.conv2 = conv2d(out_channels, out_channels, 3, 1, 1)
         self.bn2 = bn2d(out_channels)
         self.downsample = downsample
@@ -268,7 +266,7 @@ class BasicBlock(nn.Module):
     def forward(self, x):
         out = self.conv1(x)
         out = self.bn1(out)
-        out = self.relu(out)
+        out = F.relu(out)
         out = self.conv2(out)
         out = self.bn2(out)
 
@@ -276,9 +274,9 @@ class BasicBlock(nn.Module):
         if self.downsample is not None:
             residual = self.downsample(x)
 
-        out += residual
+        out = out + residual
 
-        return out if self.no_relu else self.relu(out)
+        return out if self.no_relu else F.relu(out)
 
 
 class MLP(nn.Module):
@@ -568,7 +566,7 @@ class EABlock(nn.Module):
         # compression
         x_h_shape = x_h.shape[2:]
         x_l_cp = self.compression(x_l)
-        x_h += F.interpolate(x_l_cp, size=x_h_shape, mode='bilinear')
+        x_h = x_h + F.interpolate(x_l_cp, size=x_h_shape, mode='bilinear')
 
         # high resolution
         if not self.use_cross_kv:
@@ -715,7 +713,6 @@ class SegHead(nn.Module):
             kernel_size=3,
             padding=1)
         self.bn2 = bn2d(inter_channels)
-        self.relu = nn.ReLU(inplace=False)
         self.conv2 = conv2d(
             inter_channels,
             out_channels,
@@ -724,5 +721,5 @@ class SegHead(nn.Module):
             bias_attr=True)
 
     def forward(self, x):
-        x = self.conv1(self.relu(self.bn1(x)))
-        return self.conv2(self.relu(self.bn2(x)))
+        x = self.conv1(F.relu(self.bn1(x)))
+        return self.conv2(F.relu(self.bn2(x)))
